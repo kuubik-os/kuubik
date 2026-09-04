@@ -45,6 +45,32 @@ def test_brew_runs(ssh_command):
     )
 
 
+def test_brew_package_install_run_uninstall(ssh_command):
+    _wait_for(ssh_command, "test -f /etc/.linuxbrew")
+
+    brew = "/home/linuxbrew/.linuxbrew/bin/brew"
+    pkg = "hello"
+
+    ssh_command(f"{brew} install {pkg}")
+
+    result = ssh_command(f"{brew} list --versions {pkg}")
+    assert result.stdout.strip().startswith(pkg), (
+        f"unexpected `brew list --versions {pkg}` output: {result.stdout}"
+    )
+
+    result = ssh_command("/home/linuxbrew/.linuxbrew/bin/hello")
+    assert "Hello, world!" in result.stdout, (
+        f"unexpected `hello` output: {result.stdout}"
+    )
+
+    ssh_command(f"{brew} uninstall {pkg}")
+
+    result = ssh_command(f"{brew} list --versions {pkg}", check=False)
+    assert result.returncode != 0, (
+        f"{pkg} still listed by brew after uninstall: {result.stdout}"
+    )
+
+
 def test_brew_auto_update_disabled(ssh_command):
     result = ssh_command("grep -Fx HOMEBREW_NO_AUTO_UPDATE=1 /etc/environment")
     assert result.stdout.strip() == "HOMEBREW_NO_AUTO_UPDATE=1"
