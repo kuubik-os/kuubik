@@ -225,3 +225,135 @@ run-vm-qcow2 $target_image=("localhost/" + image_name) $tag=default_tag: && (_ru
 # Run the raw VM (builds if not present)
 [group('Run VM')]
 run-vm-raw $target_image=("localhost/" + image_name) $tag=default_tag: && (_run-vm target_image tag "raw" "disk_config/disk.toml")
+
+###
+### Test
+###
+
+# Build a test image from local files, boot it in a VM, run the pytest integration suite against it, and clean up afterward
+[group('Test')]
+test-vm flavor="":
+    #!/usr/bin/env bash
+    set -eoux pipefail
+
+    case "{{ flavor }}" in
+    "")
+        image_name="kuubik"
+        tag="latest"
+        ;;
+    nvidia)
+        image_name="kuubik-nvidia"
+        tag="nvidia"
+        ;;
+    *)
+        echo "Usage: just test-vm [nvidia]" >&2
+        exit 1
+        ;;
+    esac
+
+    # resolve to an absolute path -- `just` itself may live somewhere not on
+    # root's PATH (e.g. a linuxbrew/user-local install), and the `sudo env
+    # ... just ...` calls below run in a fresh root environment that won't
+    # find a bare `just` by name
+    just_bin="$(command -v just)"
+
+    wait_budget="${TEST_SSH_WAIT_SECONDS:-1800}"
+
+    cleanup() {
+        set +e
+        echo "--- vm.log tail ---"
+        tail -n 80 vm.log 2>/dev/null
+
+        echo "--- stopping leftover VM/build containers ---"
+        sudo podman ps -a --filter ancestor=docker.io/qemux/qemu --format '{{{{.ID}}}}' | xargs -r sudo podman rm -f
+        sudo podman ps -a --filter ancestor="${bib_image}" --format '{{{{.ID}}}}' | xargs -r sudo podman rm -f
+
+        if [[ -n "${vm_pid:-}" ]]; then
+            sudo kill "${vm_pid}" 2>/dev/null
+        fi
+        rm -f vm.pid
+    }
+    trap cleanup EXIT
+
+    # Full wipe of build artifacts + output/ (container build cache is untouched
+    # either way -- podman/dnf caching already handles that). Off by default so
+    # re-runs can reuse the previous disk image; set FORCE_CLEAN=TRUE to force a
+    # from-scratch rebuild (also the escape hatch if output/ ever ends up in a
+    # broken state, e.g. root-owned leftovers from a previous interrupted run).
+    if [[ "${FORCE_CLEAN:-FALSE}" == "TRUE" ]]; then
+        echo "FORCE_CLEAN=TRUE -- wiping output/ and build artifacts..."
+        sudo rm -rf output/
+        "${just_bin}" clean
+    fi
+
+    echo "Building test image (${image_name}:${tag})..."
+    sudo env TESTING_ENVIRONMENT=TRUE "${just_bin}" build "${image_name}" "${tag}"
+
+    echo "Building test runner..."
+    sudo podman build -f tests/Containerfile -t kuubik-test-runner .
+
+    # bootc-image-builder names the raw type's output subdirectory "image", not "raw"
+    image_file="output/image/disk.raw"
+    cache_key_file="output/.build-cache-key"
+    cache_key="${image_name}:${tag}:$(sudo podman image inspect --format '{{{{.Id}}}}' "localhost/${image_name}:${tag}")"
+
+    # Skip the (slow) container-to-disk-image conversion entirely when the
+    # container image hasn't changed since the last disk build -- bootc-image-builder
+    # re-deploying the full set of layers into a fresh btrfs image is the actual
+    # bottleneck here, not the podman build (which is already layer-cached).
+    if [[ -f "${image_file}" && -f "${cache_key_file}" && "$(cat "${cache_key_file}")" == "${cache_key}" ]]; then
+        echo "Disk image already up to date with ${image_name}:${tag} -- reusing output/, skipping bootc-image-builder."
+    else
+        echo "No up-to-date cached disk image for ${image_name}:${tag} -- rebuilding it..."
+        sudo rm -rf output/
+        sudo "${just_bin}" build-raw "localhost/${image_name}" "${tag}"
+        # sudo runs the whole way through here (no non-root user podman to copy
+        # from, unlike the CI flow), so chown back to $USER ourselves so the
+        # cache key below -- and any re-run of this recipe -- stays writable
+        # without sudo.
+        sudo chown -R "${USER}:${USER}" output/
+        echo "${cache_key}" >"${cache_key_file}"
+    fi
+
+    # raw skips the extra qcow2 conversion pass bootc-image-builder would
+    # otherwise do at the end -- doesn't touch the slow steps (pulling and
+    # deploying the container image layers), but it's free to skip.
+    echo "Booting VM..."
+    nohup sudo env VM_GPU=FALSE "${just_bin}" run-vm-raw "localhost/${image_name}" "${tag}" >vm.log 2>&1 &
+    vm_pid=$!
+    echo "${vm_pid}" >vm.pid
+    deadline=$((SECONDS + wait_budget))
+    last_phase=""
+
+    while ((SECONDS < deadline)); do
+        if ! sudo kill -0 "${vm_pid}" 2>/dev/null; then
+            echo "VM launcher process (pid ${vm_pid}) exited early -- qemu never came up." >&2
+            exit 1
+        fi
+
+        if ss -tln | grep -q ':2222 '; then
+            echo "Port 2222 is listening after ${SECONDS}s"
+            break
+        fi
+
+        phase="booting qemu"
+        [[ -f "${image_file}" ]] || phase="still building disk image"
+        if [[ "${phase}" != "${last_phase}" ]]; then
+            echo "[${SECONDS}s] ${phase}..."
+            last_phase="${phase}"
+        fi
+
+        sleep 30
+    done
+
+    if ! ss -tln | grep -q ':2222 '; then
+        echo "Port 2222 never opened within ${wait_budget}s -- VM process is alive but qemu/network never came up." >&2
+        exit 1
+    fi
+
+    mkdir -p test-results
+    sudo podman run --rm --network host \
+        -e TEST_SSH_WAIT_SECONDS="${wait_budget}" \
+        -v "${PWD}/tests/ssh:/ssh:ro,Z" \
+        -v "${PWD}/test-results:/tmp/test-results:Z" \
+        kuubik-test-runner
