@@ -84,3 +84,17 @@ def test_removed_packages_absent(ssh_command):
         assert result.returncode != 0, (
             f"{package} expected to be removed from the image, but rpm -q found it: {result.stdout}"
         )
+
+
+def test_no_failed_system_units(ssh_command):
+    result = ssh_command("systemctl --failed --no-legend")
+    assert result.stdout.strip() == "", (
+        f"unexpected failed system units: {result.stdout}"
+    )
+
+
+def test_no_failed_user_units(ssh_command):
+    result = ssh_command("systemctl --user --failed --no-legend")
+    assert result.stdout.strip() == "", (
+        f"unexpected failed user units: {result.stdout}"
+    )

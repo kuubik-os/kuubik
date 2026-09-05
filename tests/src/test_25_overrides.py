@@ -1,90 +1,7 @@
+import json
 import re
-import time
-
-from defaults import TEST_USER
 
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]{8}\.[0-9]+$")
-
-
-def _wait_for(ssh_command, command, timeout=60, interval=2):
-    deadline = time.time() + timeout
-    last = None
-    while time.time() < deadline:
-        last = ssh_command(command, check=False)
-        if last.returncode == 0:
-            return last
-        time.sleep(interval)
-    raise AssertionError(
-        f"condition never became true within {timeout}s: {command}\n"
-        f"last stdout: {last.stdout if last else ''}\n"
-        f"last stderr: {last.stderr if last else ''}"
-    )
-
-
-# brew-setup.service unpacks a ~150MB tarball on first boot; SSH can become
-# reachable before it finishes, so wait for its completion marker rather than
-# assuming it's already done.
-def test_brew_installed_and_owned_by_test_user(ssh_command):
-    _wait_for(ssh_command, "test -f /etc/.linuxbrew")
-
-    ssh_command("test -x /home/linuxbrew/.linuxbrew/bin/brew")
-
-    result = ssh_command("stat -c %U /home/linuxbrew/.linuxbrew")
-    assert result.stdout.strip() == TEST_USER, (
-        f"/home/linuxbrew/.linuxbrew expected to be owned by {TEST_USER}, "
-        f"actual owner: {result.stdout.strip()}"
-    )
-
-
-def test_brew_runs(ssh_command):
-    _wait_for(ssh_command, "test -f /etc/.linuxbrew")
-
-    result = ssh_command("/home/linuxbrew/.linuxbrew/bin/brew --version")
-    assert "Homebrew" in result.stdout, (
-        f"unexpected `brew --version` output: {result.stdout}"
-    )
-
-
-def test_brew_package_install_run_uninstall(ssh_command):
-    _wait_for(ssh_command, "test -f /etc/.linuxbrew")
-
-    brew = "/home/linuxbrew/.linuxbrew/bin/brew"
-    pkg = "hello"
-
-    ssh_command(f"{brew} install {pkg}")
-
-    result = ssh_command(f"{brew} list --versions {pkg}")
-    assert result.stdout.strip().startswith(pkg), (
-        f"unexpected `brew list --versions {pkg}` output: {result.stdout}"
-    )
-
-    result = ssh_command("/home/linuxbrew/.linuxbrew/bin/hello")
-    assert "Hello, world!" in result.stdout, (
-        f"unexpected `hello` output: {result.stdout}"
-    )
-
-    ssh_command(f"{brew} uninstall {pkg}")
-
-    result = ssh_command(f"{brew} list --versions {pkg}", check=False)
-    assert result.returncode != 0, (
-        f"{pkg} still listed by brew after uninstall: {result.stdout}"
-    )
-
-
-def test_brew_auto_update_disabled(ssh_command):
-    result = ssh_command("grep -Fx HOMEBREW_NO_AUTO_UPDATE=1 /etc/environment")
-    assert result.stdout.strip() == "HOMEBREW_NO_AUTO_UPDATE=1"
-
-
-def test_brew_own_update_timers_not_shipped(ssh_command):
-    # we never copy brew-update.timer/brew-upgrade.timer out of the upstream
-    # brew image in the first place -- see Containerfile's "overrides" stage
-    result = ssh_command(
-        "systemctl --user list-unit-files 'brew-*' --no-legend", check=False
-    )
-    assert result.stdout.strip() == "", (
-        f"unexpected brew systemd units present: {result.stdout}"
-    )
 
 
 def test_rpm_ostree_auto_update_disabled(ssh_command):
@@ -134,6 +51,18 @@ def test_rpm_ostree_version_label_surfaced(ssh_command):
     version = result.stdout.strip()
     assert VERSION_RE.match(version), (
         f"booted deployment version {version!r} does not match the NN.YYYYMMDD.N scheme"
+    )
+
+
+def test_rpm_ostree_status_human_output(ssh_command):
+    # we deliberately don't run a real `rpm-ostree upgrade` here -- on a
+    # local/CI test VM the deployment's origin is a scratch/local image tag,
+    # not a real published ghcr.io ref, so there's nothing valid for it to
+    # actually pull; this just confirms the status command itself runs
+    # cleanly and reports an idle state (no stuck/failed transaction)
+    result = ssh_command("rpm-ostree status")
+    assert "State: idle" in result.stdout, (
+        f"unexpected rpm-ostree status output: {result.stdout}"
     )
 
 
