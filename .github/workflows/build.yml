@@ -64,7 +64,6 @@ jobs:
         run: |
           find . -iname "*.sh" -type f -exec shellcheck "{}" ';'
 
-
   prepare:
     name: Compute build metadata
     needs: check_formatting
