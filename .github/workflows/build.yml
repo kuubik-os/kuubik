@@ -6,7 +6,7 @@ on:
   pull_request:
     branches:
       - main
-    paths:
+    paths: &paths
       - ".github/workflows/build.yml"
       - "build_scripts/**"
       - "system_files/**"
@@ -18,14 +18,7 @@ on:
   push:
     branches:
       - main
-    paths:
-      - ".github/workflows/build.yml"
-      - "build_scripts/**"
-      - "system_files/**"
-      - "Containerfile"
-      - "Justfile"
-      - "disk_config/**"
-      - "tests/**"
+    paths: *paths
 
   schedule:
     # tuesday 15:00 UTC
@@ -35,17 +28,14 @@ on:
 
 env:
   IMAGE_DESC: "${{ github.event.repository.name }}"
-  IMAGE_NAME: "${{ github.event.repository.name }}"
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
   FEDORA_VERSION: "44"
-  DEFAULT_TAG: "latest"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-
 
   check_formatting:
     name: Check BASH
@@ -56,80 +46,45 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
 
-      - name: install dependencies
-        run: |
-          sudo apt update && sudo apt install -y shellcheck
-
       - name: run shellcheck checker
         run: |
-          find . -iname "*.sh" -type f -exec shellcheck "{}" ';'
+          find . -iname "*.sh" -type f -exec shellcheck {} +
+          shellcheck system_files/base/usr/bin/kctl system_files/base/usr/libexec/kctl-update-check
 
   prepare:
     name: Compute build metadata
     needs: check_formatting
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
-
-    permissions:
-      actions: read
+    timeout-minutes: 5
 
     outputs:
-      date: ${{ steps.date.outputs.date }}
-      date_tag: ${{ steps.build_seq.outputs.date_tag }}
-      version_tag: ${{ steps.build_seq.outputs.version_tag }}
+      date: ${{ steps.meta.outputs.date }}
+      date_tag: ${{ steps.meta.outputs.date_tag }}
+      version_tag: ${{ steps.meta.outputs.version_tag }}
 
     steps:
-      - name: Get current date
-        id: date
+      - name: Compute date and version tags
+        id: meta
         run: |
-          echo "date=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)" >> $GITHUB_OUTPUT
-
-      - name: Compute daily build sequence
-        id: build_seq
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_NUMBER: ${{ github.run_number }}
-          EVENT_NAME: ${{ github.event_name }}
-          FEDORA_VERSION: ${{ env.FEDORA_VERSION }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-
-          TAG_DATE="$(date -u +%Y%m%d)"
-          START_OF_DAY="$(date -u +%Y-%m-%d)T00:00:00Z"
-          START_OF_NEXT_DAY="$(date -u -d tomorrow +%Y-%m-%d)T00:00:00Z"
-          API_URL="https://api.github.com/repos/${REPOSITORY}/actions/workflows/build.yml/runs?per_page=100&created=${START_OF_DAY}..${START_OF_NEXT_DAY}"
-
-          RUNS_JSON="$(mktemp)"
-          curl --fail --silent --show-error \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "$API_URL" > "$RUNS_JSON"
-
-          DAILY_SEQUENCE="$(jq \
-            --argjson run_number "${RUN_NUMBER}" \
-            --arg event_name "${EVENT_NAME}" \
-            '[.workflow_runs[]
-              | select(.event == $event_name)
-              | select(.run_number <= $run_number)
-              | select(.conclusion == "success")
-            ] | length + 1' \
-            "$RUNS_JSON")"
-          rm -fv "$RUNS_JSON"
-
-          echo "daily_sequence=${DAILY_SEQUENCE}" >> "$GITHUB_OUTPUT"
-          echo "date_tag=${TAG_DATE}.${DAILY_SEQUENCE}" >> "$GITHUB_OUTPUT"
-          echo "version_tag=${FEDORA_VERSION}.${TAG_DATE}.${DAILY_SEQUENCE}" >> "$GITHUB_OUTPUT"
-
+          date_tag="$(date -u +%Y%m%d).${{ github.run_number }}"
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "date_tag=${date_tag}" >> "$GITHUB_OUTPUT"
+          echo "version_tag=${FEDORA_VERSION}.${date_tag}" >> "$GITHUB_OUTPUT"
 
   build_image:
-    name: Build image (${{ matrix.flavor || 'kuubik' }})
+    name: Build image (${{ matrix.flavor }})
     needs: prepare
 
     strategy:
       fail-fast: true
-      matrix:
-        flavor: ["", "nvidia"]
+      matrix: &flavors
+        include:
+          - flavor: kuubik
+            image: kuubik
+            tag: latest
+          - flavor: nvidia
+            image: kuubik-nvidia
+            tag: nvidia
 
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -142,47 +97,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
 
-      - name: Compute image name
-        id: image
-        run: |
-          if [ -n "${{ matrix.flavor }}" ]; then
-            echo "name=${{ env.IMAGE_NAME }}-${{ matrix.flavor }}" >> "$GITHUB_OUTPUT"
-            echo "default_tag=${{ matrix.flavor }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "name=${{ env.IMAGE_NAME }}" >> "$GITHUB_OUTPUT"
-            echo "default_tag=${{ env.DEFAULT_TAG }}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Prepare build args file
-        run: |
-          cat <<'EOF' >>build_args.txt
-          FEDORA_VERSION=${{ env.FEDORA_VERSION }}
-          IMAGE_VERSION=${{ needs.prepare.outputs.version_tag }}
-          EOF
-
       - name: Build production image
         run: |
-          sudo -E buildah build \
-            --target ${{ steps.image.outputs.name }} \
+          sudo buildah build \
+            --target ${{ matrix.image }} \
             --file Containerfile \
-            --build-arg-file build_args.txt \
+            --build-arg FEDORA_VERSION=${{ env.FEDORA_VERSION }} \
+            --build-arg IMAGE_VERSION=${{ needs.prepare.outputs.version_tag }} \
             --tag raw-img .
 
       - name: Push scratch image to GHCR
         run: |
-          set -euo pipefail
           echo "${{ secrets.GITHUB_TOKEN }}" | sudo buildah login --username "${{ github.actor }}" --password-stdin ghcr.io
-          sudo buildah push raw-img "${{ env.IMAGE_REGISTRY }}/${{ steps.image.outputs.name }}:ci-${{ github.run_id }}"
-
+          sudo buildah push raw-img "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:ci-${{ github.run_id }}"
 
   test_image:
-    name: Test image (${{ matrix.flavor || 'kuubik' }})
+    name: Test image (${{ matrix.flavor }})
     needs: build_image
 
     strategy:
       fail-fast: true
-      matrix:
-        flavor: ["", "nvidia"]
+      matrix: *flavors
 
     runs-on: ubuntu-24.04
     timeout-minutes: 120
@@ -195,143 +130,46 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
 
-      - name: Compute image name
-        id: image
+      - name: Install dependencies
         run: |
-          if [ -n "${{ matrix.flavor }}" ]; then
-            echo "name=${{ env.IMAGE_NAME }}-${{ matrix.flavor }}" >> "$GITHUB_OUTPUT"
-            echo "default_tag=${{ matrix.flavor }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "name=${{ env.IMAGE_NAME }}" >> "$GITHUB_OUTPUT"
-            echo "default_tag=${{ env.DEFAULT_TAG }}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Pull scratch image
-        run: |
-          set -euo pipefail
-          echo "${{ secrets.GITHUB_TOKEN }}" | sudo buildah login --username "${{ github.actor }}" --password-stdin ghcr.io
-          scratch_ref="${{ env.IMAGE_REGISTRY }}/${{ steps.image.outputs.name }}:ci-${{ github.run_id }}"
-          sudo buildah pull "${scratch_ref}"
-          sudo buildah tag "${scratch_ref}" "localhost/${{ steps.image.outputs.name }}:${{ steps.image.outputs.default_tag }}"
-
-      - name: Create a copy to run tests on
-        run: |
-          set -euo pipefail
-          ctr="$(sudo buildah from "localhost/${{ steps.image.outputs.name }}:${{ steps.image.outputs.default_tag }}")"
-          sudo buildah run "$ctr" -- systemctl enable sshd.service
-          sudo buildah run "$ctr" -- sh -c '
-            echo "test_user ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/test_user &&
-            chmod 0440 /etc/sudoers.d/test_user
-          '
-          sudo buildah commit "$ctr" test-img
-          sudo buildah rm "$ctr"
-          sudo buildah tag test-img "localhost/${{ steps.image.outputs.name }}:${{ steps.image.outputs.default_tag }}"
-
-      # we need newer `act` version
-      - name: Prepare dependencies
-        run: |
-          sudo apt update && sudo apt install -y podman systemd-container
+          sudo apt-get update && sudo apt-get install -y podman systemd-container
 
           just_version="1.52.0"
           just_archive="just-${just_version}-x86_64-unknown-linux-musl.tar.gz"
-          just_url="https://github.com/casey/just/releases/download/${just_version}/${just_archive}"
           just_sha256="e0a712614574d45625332529c864754e26782422b7c7db931466180a618f092d"
 
-          curl --fail --location --show-error --silent --output "${just_archive}" "${just_url}"
+          curl --fail --location --show-error --silent --output "${just_archive}" \
+            "https://github.com/casey/just/releases/download/${just_version}/${just_archive}"
           echo "${just_sha256}  ${just_archive}" | sha256sum --check
           tar -xzf "${just_archive}" just
-          chmod +x just
           sudo install -m 0755 just /usr/local/bin/just
 
-      - name: Build test runner
+      - name: Pull scratch image
         run: |
-          sudo podman build -f tests/Containerfile -t kuubik-test-runner .
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login --username "${{ github.actor }}" --password-stdin ghcr.io
+          sudo podman pull "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:ci-${{ github.run_id }}"
 
-      - name: Build and run VM image
-        run: |
-          nohup sudo env VM_GPU="FALSE" just run-vm-raw \
-            "localhost/${{ steps.image.outputs.name }}" \
-            "${{ steps.image.outputs.default_tag }}" \
-            > vm.log 2>&1 &
-          echo $! > vm.pid
-
-      - name: Wait for VM to become reachable (diagnose if not)
-        run: |
-          set +e
-          vm_pid="$(cat vm.pid)"
-          image_file="output/image/disk.raw"
-          wait_budget=2400
-          deadline=$((SECONDS + wait_budget))
-          last_phase=""
-
-          while (( SECONDS < deadline )); do
-            if ! sudo kill -0 "${vm_pid}" 2>/dev/null; then
-              echo "::error::VM launcher process (pid ${vm_pid}) exited early -- qemu never came up."
-              echo "--- vm.log (full) ---"
-              cat vm.log
-              echo "--- podman ps -a ---"
-              sudo podman ps -a
-              exit 1
-            fi
-
-            if ss -tln | grep -q ':2222 '; then
-              echo "Port 2222 is listening after ${SECONDS}s"
-              break
-            fi
-
-            phase="booting qemu"
-            [[ -f "${image_file}" ]] || phase="still building disk image"
-            if [[ "${phase}" != "${last_phase}" ]]; then
-              echo "[${SECONDS}s] ${phase}..."
-              last_phase="${phase}"
-            fi
-
-            sleep 60
-          done
-
-          echo "--- podman ps -a ---"
-          sudo podman ps -a
-          echo "--- listening ports ---"
-          ss -tlnp
-          echo "--- vm.log tail ---"
-          tail -n 80 vm.log
-
-          if ! ss -tln | grep -q ':2222 '; then
-            echo "::error::Port 2222 never opened within ${wait_budget}s -- VM process is alive but qemu/network never came up. See podman ps and vm.log above."
-            exit 1
-          fi
-
-      - name: Run pytest integration tests
-        env:
-          TEST_SSH_WAIT_SECONDS: "1800"
-        run: |
-          mkdir -p test-results
-          sudo podman run --rm --network host \
-            -e TEST_SSH_WAIT_SECONDS="${TEST_SSH_WAIT_SECONDS}" \
-            -v "${PWD}/tests/ssh:/ssh:ro,Z" \
-            -v "${PWD}/test-results:/tmp/test-results:Z" \
-            kuubik-test-runner
+      - name: Run integration tests
+        run: just test "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:ci-${{ github.run_id }}"
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: test-results-${{ matrix.flavor || 'kuubik' }}
+          name: test-results-${{ matrix.flavor }}
           path: |
             test-results/
             vm.log
           if-no-files-found: warn
           retention-days: 14
 
-
   publish_image:
-    name: Rechunk and publish (${{ matrix.flavor || 'kuubik' }})
+    name: Rechunk and publish (${{ matrix.flavor }})
     needs: [prepare, build_image, test_image]
 
     strategy:
       fail-fast: true
-      matrix:
-        flavor: ["", "nvidia"]
+      matrix: *flavors
 
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -345,27 +183,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
 
-      - name: Compute image name
-        id: image
-        run: |
-          if [ -n "${{ matrix.flavor }}" ]; then
-            echo "name=${{ env.IMAGE_NAME }}-${{ matrix.flavor }}" >> "$GITHUB_OUTPUT"
-            echo "default_tag=${{ matrix.flavor }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "name=${{ env.IMAGE_NAME }}" >> "$GITHUB_OUTPUT"
-            echo "default_tag=${{ env.DEFAULT_TAG }}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Image Metadata
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         id: metadata
         with:
           tags: |
             type=raw,value=${{ needs.prepare.outputs.date_tag }}
-            type=raw,value=${{ env.DEFAULT_TAG }}
+            type=raw,value=latest
             type=raw,value=${{ env.FEDORA_VERSION }}
             type=raw,value=${{ needs.prepare.outputs.version_tag }}
-            type=raw,value=${{ matrix.flavor }},enable=${{ matrix.flavor != '' }}
+            type=raw,value=${{ matrix.tag }},enable=${{ matrix.tag != 'latest' }}
             type=sha,enable=${{ github.event_name == 'pull_request' }}
             type=ref,event=pr
           labels: |
@@ -373,7 +200,7 @@ jobs:
             org.opencontainers.image.description=${{ env.IMAGE_DESC }}
             org.opencontainers.image.documentation=https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/readme.md
             org.opencontainers.image.source=https://github.com/${{ github.repository }}/blob/${{ github.sha }}/Containerfile
-            org.opencontainers.image.title=${{ steps.image.outputs.name }}
+            org.opencontainers.image.title=${{ matrix.image }}
             org.opencontainers.image.url=https://github.com/${{ github.repository }}/tree/${{ github.sha }}
             org.opencontainers.image.vendor=${{ github.repository_owner }}
             org.opencontainers.image.version=${{ needs.prepare.outputs.version_tag }}
@@ -383,9 +210,8 @@ jobs:
 
       - name: Pull scratch image
         run: |
-          set -euo pipefail
+          scratch_ref="${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:ci-${{ github.run_id }}"
           echo "${{ secrets.GITHUB_TOKEN }}" | sudo buildah login --username "${{ github.actor }}" --password-stdin ghcr.io
-          scratch_ref="${{ env.IMAGE_REGISTRY }}/${{ steps.image.outputs.name }}:ci-${{ github.run_id }}"
           sudo buildah pull "${scratch_ref}"
           sudo buildah tag "${scratch_ref}" raw-img
 
@@ -395,7 +221,7 @@ jobs:
         with:
           rechunk: 'ghcr.io/ublue-os/legacy-rechunk:v1.0.0-x86_64'
           ref: 'raw-img'
-          prev-ref: '${{ env.IMAGE_REGISTRY }}/${{ steps.image.outputs.name }}:${{ steps.image.outputs.default_tag }}'
+          prev-ref: '${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:${{ matrix.tag }}'
           skip_compression: false
           version: '${{ steps.metadata.outputs.tags }}'
           labels: '${{ steps.metadata.outputs.labels }}'
@@ -406,9 +232,8 @@ jobs:
           IMAGE=$(podman pull ${{ steps.rechunk.outputs.ref }})
           sudo rm -rf ${{ steps.rechunk.outputs.output }}
           for tag in ${{ steps.metadata.outputs.tags }}; do
-            podman tag $IMAGE "${{ env.IMAGE_REGISTRY }}/${{ steps.image.outputs.name }}:$tag"
+            podman tag $IMAGE "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:$tag"
           done
-
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
@@ -421,33 +246,17 @@ jobs:
       - name: Push To GHCR
         if: github.event_name != 'pull_request'
         run: |
-          set -euo pipefail
-
-          retries=5
-          delay=10
-
           for tag in ${{ steps.metadata.outputs.tags }}; do
-            echo "Pushing tag: $tag"
-
-            for attempt in $(seq 1 $retries); do
-              echo "  Attempt $attempt/$retries for $tag..."
-              if podman push "${{ env.IMAGE_REGISTRY }}/${{ steps.image.outputs.name }}:$tag" --tls-verify=true; then
-                echo "  Push of $tag succeeded"
-                break
-              fi
-
-              if [ "$attempt" -lt "$retries" ]; then
-                echo "  Push of $tag failed — retrying in $delay seconds..."
-                sleep $delay
-              else
-                echo "  Push of $tag failed after $retries attempts"
-                exit 1
-              fi
+            for attempt in 1 2 3 4 5; do
+              podman push "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:$tag" && break
+              [ "$attempt" -lt 5 ] || exit 1
+              echo "push of $tag failed, retrying in 10s"
+              sleep 10
             done
           done
 
       - name: Install Cosign
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
         with:
           cosign-release: "v2.6.1"
@@ -455,23 +264,20 @@ jobs:
       - name: Sign container image
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         run: |
-          IMAGE_FULL="${{ env.IMAGE_REGISTRY }}/${{ steps.image.outputs.name }}"
           for tag in ${{ steps.metadata.outputs.tags }}; do
-            cosign sign -y --key env://COSIGN_PRIVATE_KEY $IMAGE_FULL:$tag
+            cosign sign -y --key env://COSIGN_PRIVATE_KEY "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:$tag"
           done
         env:
           COSIGN_EXPERIMENTAL: false
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
 
-
   cleanup_scratch_images:
-    name: Clean up scratch CI image (${{ matrix.flavor || 'kuubik' }})
+    name: Clean up scratch CI image (${{ matrix.flavor }})
     if: always()
     needs: [build_image, test_image, publish_image]
 
     strategy:
-      matrix:
-        flavor: ["", "nvidia"]
+      matrix: *flavors
 
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -480,18 +286,9 @@ jobs:
       packages: write
 
     steps:
-      - name: Compute image name
-        id: image
-        run: |
-          if [ -n "${{ matrix.flavor }}" ]; then
-            echo "name=${{ env.IMAGE_NAME }}-${{ matrix.flavor }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "name=${{ env.IMAGE_NAME }}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Delete scratch CI image
         uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          packages: ${{ steps.image.outputs.name }}
+          packages: ${{ matrix.image }}
           tags: ci-${{ github.run_id }}
