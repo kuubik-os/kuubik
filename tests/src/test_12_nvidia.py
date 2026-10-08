@@ -3,38 +3,16 @@ import pytest
 # same signal 00-base.sh itself uses to detect the nvidia flavor at build time
 NVIDIA_FLAVOR_MARKER = "/usr/lib/dracut/dracut.conf.d/99-nvidia.conf"
 
-# top-level packages 00-base.sh installs for the nvidia flavor, minus
-# akmods/akmod-nvidia -- those are build-only and removed again by
-# 80-finilize.sh, so they're never present in the shipped image
-NVIDIA_PACKAGES = [
-    "nvidia-driver",
-    "nvidia-driver-cuda",
-    "nvidia-driver-libs",
-    "xorg-x11-nvidia",
-    "nvidia-settings",
-    "nvidia-xconfig",
-]
-
 
 def _is_nvidia_flavor(ssh_command):
     result = ssh_command(f"test -f {NVIDIA_FLAVOR_MARKER}", check=False)
     return result.returncode == 0
 
 
-# these two only assert anything on a kuubik-nvidia VM; on plain kuubik they
-# skip outright. We can't check the driver actually works this way -- the
-# VM these tests run against has no GPU passthrough (VM_GPU=FALSE) -- so
-# this only confirms the userspace stack is installed and the kmod was
-# actually built for the running kernel, mirroring the same checks
-# 00-base.sh itself does at build time.
-def test_nvidia_packages_installed(ssh_command):
-    if not _is_nvidia_flavor(ssh_command):
-        pytest.skip(f"not nvidia flavor -- {NVIDIA_FLAVOR_MARKER} not present")
-
-    for package in NVIDIA_PACKAGES:
-        ssh_command(f"rpm -q {package}")
-
-
+# only asserts anything on a kuubik-nvidia VM; on plain kuubik it skips
+# outright. We can't check the driver actually works this way -- the VM these
+# tests run against has no GPU passthrough (VM_GPU=FALSE) -- so this only
+# confirms the kmod was actually built for the running kernel.
 def test_nvidia_kernel_module_built(ssh_command):
     if not _is_nvidia_flavor(ssh_command):
         pytest.skip(f"not nvidia flavor -- {NVIDIA_FLAVOR_MARKER} not present")

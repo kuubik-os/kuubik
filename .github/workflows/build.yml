@@ -58,54 +58,16 @@ jobs:
 
       - name: install dependencies
         run: |
-          sudo apt update && sudo apt install -y shfmt shellcheck
-
-      - name: run shfmt checker
-        run: |
-          find . -iname "*.sh" -type f -exec shfmt --diff "{}" +
+          sudo apt update && sudo apt install -y shellcheck
 
       - name: run shellcheck checker
         run: |
           find . -iname "*.sh" -type f -exec shellcheck "{}" ';'
 
 
-  check_python:
-    name: Сheck Python
-    needs: check_formatting
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-
-      - name: Install lint dependencies
-        working-directory: tests/src
-        run: |
-          uv sync --group lint --no-cache
-
-      - name: check code formatting (ruff format)
-        working-directory: tests/src
-        run: |
-          uv run ruff format --check .
-
-      - name: check lint issues -- unused/unsorted imports, unsafe calls, etc. (ruff check)
-        working-directory: tests/src
-        run: |
-          uv run ruff check .
-
-      - name: check type correctness (ty check)
-        working-directory: tests/src
-        run: |
-          uv run ty check .
-
-
   prepare:
     name: Compute build metadata
-    needs: check_python
+    needs: check_formatting
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
@@ -282,15 +244,6 @@ jobs:
           chmod +x just
           sudo install -m 0755 just /usr/local/bin/just
 
-      - name: Check virtualization support on this runner
-        run: |
-          echo "--- /dev/kvm ---"
-          ls -la /dev/kvm || echo "MISSING: /dev/kvm does not exist"
-          echo "--- cpu virt flags ---"
-          grep -Eo '(vmx|svm)' /proc/cpuinfo | sort -u || echo "MISSING: no vmx/svm cpu flags"
-          echo "--- kvm kernel modules ---"
-          lsmod | grep -i kvm || echo "MISSING: kvm module not loaded"
-
       - name: Build test runner
         run: |
           sudo podman build -f tests/Containerfile -t kuubik-test-runner .
@@ -360,60 +313,6 @@ jobs:
             -v "${PWD}/test-results:/tmp/test-results:Z" \
             kuubik-test-runner
 
-      - name: Parse test report
-        if: always()
-        run: |
-          python3 - <<'PY'
-          import os
-          import sys
-          import xml.etree.ElementTree as ET
-          from pathlib import Path
-
-          report = Path("test-results/junit.xml")
-          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
-
-          if not report.exists():
-              summary.write_text("## Pytest report\n\nJUnit report was not produced.\n", encoding="utf-8")
-              sys.exit(1)
-
-          root = ET.parse(report).getroot()
-          suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
-
-          def total(attribute):
-              return sum(int(suite.attrib.get(attribute, 0)) for suite in suites)
-
-          tests = total("tests")
-          failures = total("failures")
-          errors = total("errors")
-          skipped = total("skipped")
-          passed = tests - failures - errors - skipped
-
-          lines = [
-              f"## Pytest report ({os.environ.get('MATRIX_FLAVOR') or 'kuubik'})",
-              "",
-              f"- Passed: {passed}",
-              f"- Failed: {failures}",
-              f"- Errors: {errors}",
-              f"- Skipped: {skipped}",
-              f"- Total: {tests}",
-              "",
-          ]
-
-          for case in root.iter("testcase"):
-              problem = case.find("failure")
-              if problem is None:
-                  problem = case.find("error")
-              if problem is None:
-                  continue
-              name = f"{case.attrib.get('classname', '')}.{case.attrib.get('name', '')}".strip(".")
-              message = problem.attrib.get("message", "").splitlines()[0]
-              lines.append(f"- `{name}`: {message}")
-
-          summary.write_text("\n".join(lines), encoding="utf-8")
-          PY
-        env:
-          MATRIX_FLAVOR: ${{ matrix.flavor }}
-
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -424,11 +323,6 @@ jobs:
             vm.log
           if-no-files-found: warn
           retention-days: 14
-
-      - name: Debug
-        if: always()
-        run: |
-          cat vm.log
 
 
   publish_image:

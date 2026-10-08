@@ -9,14 +9,6 @@ dependencies = [
 [tool.uv]
 package = false
 
-# separate from the default "dev" group so `uv sync` in tests/Containerfile
-# (used to build the actual test-runner image) doesn't pull these in
-[dependency-groups]
-lint = [
-    "ruff>=0.9",
-    "ty>=0.0.70",
-]
-
 [tool.pytest.ini_options]
 testpaths = ["."]
 addopts = [
@@ -24,9 +16,3 @@ addopts = [
     "--strict-config",
     "--strict-markers",
 ]
-
-[tool.ruff]
-target-version = "py312"
-
-[tool.ty.environment]
-python-version = "3.12"

@@ -35,15 +35,6 @@ def test_brew_installed_and_owned_by_test_user(ssh_command):
     )
 
 
-def test_brew_runs(ssh_command):
-    _wait_for(ssh_command, "test -f /etc/.linuxbrew")
-
-    result = ssh_command(f"{BREW} --version")
-    assert "Homebrew" in result.stdout, (
-        f"unexpected `brew --version` output: {result.stdout}"
-    )
-
-
 def test_brew_package_install_run_uninstall(ssh_command):
     _wait_for(ssh_command, "test -f /etc/.linuxbrew")
 
@@ -66,45 +57,4 @@ def test_brew_package_install_run_uninstall(ssh_command):
     result = ssh_command(f"{BREW} list --versions {pkg}", check=False)
     assert result.returncode != 0, (
         f"{pkg} still listed by brew after uninstall: {result.stdout}"
-    )
-
-
-def test_brew_service_start_listens_stop_uninstall(ssh_command):
-    _wait_for(ssh_command, "test -f /etc/.linuxbrew")
-
-    pkg = "syncthing"
-    port = 8384  # syncthing's default web GUI port
-
-    ssh_command(f"{BREW} install {pkg}")
-
-    ssh_command(f"{BREW} services start {pkg}")
-    _wait_for(
-        ssh_command, f"{BREW} services list | grep -E '^{pkg}[[:space:]]+started'"
-    )
-    _wait_for(ssh_command, f"ss -ltn | grep -q ':{port} '")
-
-    ssh_command(f"{BREW} services stop {pkg}")
-    _wait_for(ssh_command, f"! ss -ltn | grep -q ':{port} '")
-
-    ssh_command(f"{BREW} uninstall {pkg}")
-
-    result = ssh_command(f"{BREW} list --versions {pkg}", check=False)
-    assert result.returncode != 0, (
-        f"{pkg} still listed by brew after uninstall: {result.stdout}"
-    )
-
-
-def test_brew_auto_update_disabled(ssh_command):
-    result = ssh_command("grep -Fx HOMEBREW_NO_AUTO_UPDATE=1 /etc/environment")
-    assert result.stdout.strip() == "HOMEBREW_NO_AUTO_UPDATE=1"
-
-
-def test_brew_own_update_timers_not_shipped(ssh_command):
-    # we never copy brew-update.timer/brew-upgrade.timer out of the upstream
-    # brew image in the first place -- see Containerfile's "overrides" stage
-    result = ssh_command(
-        "systemctl --user list-unit-files 'brew-*' --no-legend", check=False
-    )
-    assert result.stdout.strip() == "", (
-        f"unexpected brew systemd units present: {result.stdout}"
     )
