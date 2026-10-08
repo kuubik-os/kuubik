@@ -3,7 +3,7 @@
 list of changes: https://kuubik-os.github.io/
 
 
-### install
+## install
 to use it firstly install fedora kinoite, and switch to unsigned image first:
 
 ```bash
@@ -15,7 +15,7 @@ and then after reboot switch to signed version:
 rpm-ostree rebase ostree-image-signed:docker://ghcr.io/kuubik-os/kuubik
 ```
 
-#### nvidia
+## nvidia
 for nvidia version, use nvidia image name:
 
 ```bash
@@ -27,7 +27,7 @@ reboot, and then:
 rpm-ostree rebase ostree-image-signed:docker://ghcr.io/kuubik-os/kuubik-nvidia
 ```
 
-#### credits
+## credits
 
 all of that work is based on other OSS projects. Huge thanks to:
 
