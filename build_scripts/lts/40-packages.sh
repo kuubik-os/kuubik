@@ -15,3 +15,6 @@ dnf -y install --nogpgcheck --repofrompath "terra,https://repos.fyralabs.com/ter
 dnf -y install ananicy-cpp ubuntumono-nerd-fonts jetbrainsmono-nerd-fonts
 dnf -y remove terra-release
 systemctl enable ananicy-cpp.service
+
+# rpm's /var/log/tuned is lost with the build tmpfs /var, tmpfiles recreates it with the tuned_log_t label tuned-ppd needs
+echo 'd /var/log/tuned 0755 root root -' >/usr/lib/tmpfiles.d/kuubik-tuned.conf

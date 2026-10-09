@@ -124,6 +124,7 @@ jobs:
             --build-arg FEDORA_VERSION=${{ env.FEDORA_VERSION }} \
             --build-arg LTS_VERSION=${{ env.LTS_VERSION }} \
             --build-arg IMAGE_VERSION=${{ needs.prepare.outputs.date_tag }} \
+            --label org.opencontainers.image.version=${{ needs.prepare.outputs.date_tag }} \
             --tag raw-img .
 
       - name: Push scratch image to GHCR
