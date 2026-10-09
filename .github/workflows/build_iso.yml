@@ -1,0 +1,117 @@
+---
+
+name: Build install ISO
+on:
+
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/build_iso.yml"
+      - "installer/**"
+
+  workflow_call:
+
+  workflow_dispatch:
+
+env:
+  IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}-iso
+  cancel-in-progress: true
+
+jobs:
+
+  build_iso:
+    name: Build ISO (${{ matrix.image }})
+
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - kuubik
+          - kuubik-nvidia
+
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
+        with:
+          tool-cache: true
+
+      # base image, payload image and squashfs don't fit on default runner disk
+      - name: Mount container storage on btrfs loopback
+        run: |
+          sudo truncate -s 110G /mnt/podman-storage.img
+          sudo mkfs.btrfs -f -m single -d single /mnt/podman-storage.img
+          sudo podman system reset --force
+          LOOP=$(sudo losetup --find --show --direct-io=on /mnt/podman-storage.img)
+          sudo mkdir -p /mnt/podman-storage
+          sudo mount -o compress-force=zstd:2,discard=async,noatime "$LOOP" /mnt/podman-storage
+          sudo mkdir -p /mnt/podman-storage/storage /mnt/podman-storage/tmp
+          sudo mount --bind /mnt/podman-storage/storage /var/lib/containers/storage
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+
+      # live env always runs non-nvidia image, nouveau is enough
+      - name: Build live environment image
+        run: |
+          sudo env TMPDIR=/mnt/podman-storage/tmp podman build \
+            --cap-add sys_admin \
+            --security-opt label=disable \
+            --build-arg BASE_IMAGE="${{ env.IMAGE_REGISTRY }}/kuubik:latest" \
+            --build-arg INSTALL_IMAGE_PAYLOAD="${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:latest" \
+            --tag localhost/payload:latest \
+            installer/
+
+      - name: Build ISO
+        uses: ublue-os/titanoboa@5c457c3d0518bd17e754be0fd98a60d29d26abb4 # main
+        id: build
+        with:
+          image-ref: localhost/payload:latest
+          iso-dest: ${{ matrix.image }}-live-amd64.iso
+
+      - name: Move ISO to upload directory
+        id: upload-directory
+        run: |
+          iso_upload_dir="${{ github.workspace }}/upload"
+          iso_path="${{ steps.build.outputs.iso-dest }}"
+          iso_name="$(basename "${iso_path}")"
+
+          mkdir -p "${iso_upload_dir}"
+          mv "${iso_path}" "${iso_upload_dir}"
+          (cd "${iso_upload_dir}" && sha256sum "${iso_name}" | tee "${iso_name}-CHECKSUM")
+          echo "iso-upload-dir=${iso_upload_dir}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+        with:
+          cosign-release: "v2.6.1"
+
+      - name: Sign ISO
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          ISO_UPLOAD_DIR: ${{ steps.upload-directory.outputs.iso-upload-dir }}
+        run: |
+          for iso in "${ISO_UPLOAD_DIR}"/*.iso; do
+            cosign sign-blob -y --key env://COSIGN_PRIVATE_KEY "${iso}" --output-signature "${iso}.sig"
+          done
+
+      - name: Upload ISO
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.image }}-live-amd64
+          path: ${{ steps.upload-directory.outputs.iso-upload-dir }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          overwrite: true

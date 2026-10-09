@@ -1,0 +1,10 @@
+label: "kuubik-Live"
+grub2:
+  timeout: 5
+  entries:
+    - name: "Install kuubik"
+      linux: "/images/pxeboot/vmlinuz quiet rhgb root=live:CDLABEL=kuubik-Live enforcing=0 rd.live.image"
+      initrd: "/images/pxeboot/initrd.img"
+    - name: "Install kuubik (basic graphics mode)"
+      linux: "/images/pxeboot/vmlinuz quiet rhgb root=live:CDLABEL=kuubik-Live enforcing=0 rd.live.image nomodeset"
+      initrd: "/images/pxeboot/initrd.img"
