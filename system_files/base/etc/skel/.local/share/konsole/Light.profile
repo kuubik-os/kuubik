@@ -7,7 +7,7 @@ UseFontLineChararacters=true
 CursorShape=1
 
 [General]
-Command=bash
+Command=zsh
 Name=Light
 Parent=FALLBACK/
 ShowTerminalSizeHint=false

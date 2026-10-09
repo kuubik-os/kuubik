@@ -7,7 +7,7 @@ UseFontLineChararacters=true
 CursorShape=1
 
 [General]
-Command=bash
+Command=zsh
 Name=Dark
 Parent=FALLBACK/
 ShowTerminalSizeHint=false

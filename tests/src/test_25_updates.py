@@ -1,6 +1,6 @@
 import re
 
-VERSION_RE = re.compile(r"^[0-9]+\.[0-9]{8}\.[0-9]+$")
+VERSION_RE = re.compile(r"^[0-9]{8}\.[0-9]+$")
 
 
 def test_rpm_ostree_auto_update_disabled(ssh_command):
@@ -29,7 +29,7 @@ def test_rpm_ostree_version_label_surfaced(ssh_command):
     )
     version = result.stdout.strip()
     assert VERSION_RE.match(version), (
-        f"booted deployment version {version!r} does not match the NN.YYYYMMDD.N scheme"
+        f"booted deployment version {version!r} does not match the YYYYMMDD.N scheme"
     )
 
 

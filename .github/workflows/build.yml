@@ -58,6 +58,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
 
+    permissions:
+      actions: read
+
     outputs:
       date: ${{ steps.meta.outputs.date }}
       date_tag: ${{ steps.meta.outputs.date_tag }}
@@ -65,10 +68,19 @@ jobs:
     steps:
       - name: Compute date and version tags
         id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          date_tag="$(date -u +%Y%m%d).${{ github.run_number }}"
-          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-          echo "date_tag=${date_tag}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          day="${now%%T*}"
+
+          # build number for the day: successful non-PR runs of this workflow today + 1
+          seq="$(gh api "repos/${{ github.repository }}/actions/workflows/build.yml/runs?per_page=100&created=${day}" \
+            --jq '[.workflow_runs[] | select(.event != "pull_request" and .conclusion == "success")] | length + 1')"
+
+          echo "date=${now}" >> "$GITHUB_OUTPUT"
+          echo "date_tag=${day//-/}.${seq}" >> "$GITHUB_OUTPUT"
 
   build_image:
     name: Build image (${{ matrix.flavor }})
@@ -111,7 +123,7 @@ jobs:
             --file Containerfile \
             --build-arg FEDORA_VERSION=${{ env.FEDORA_VERSION }} \
             --build-arg LTS_VERSION=${{ env.LTS_VERSION }} \
-            --build-arg IMAGE_VERSION=${{ matrix.lts && env.LTS_VERSION || env.FEDORA_VERSION }}.${{ needs.prepare.outputs.date_tag }} \
+            --build-arg IMAGE_VERSION=${{ needs.prepare.outputs.date_tag }} \
             --tag raw-img .
 
       - name: Push scratch image to GHCR
@@ -199,7 +211,6 @@ jobs:
             type=raw,value=${{ needs.prepare.outputs.date_tag }}
             type=raw,value=latest
             type=raw,value=${{ matrix.lts && env.LTS_VERSION || env.FEDORA_VERSION }}
-            type=raw,value=${{ matrix.lts && env.LTS_VERSION || env.FEDORA_VERSION }}.${{ needs.prepare.outputs.date_tag }}
             type=raw,value=${{ matrix.tag }},enable=${{ matrix.tag != 'latest' }}
             type=sha,enable=${{ github.event_name == 'pull_request' }}
             type=ref,event=pr
@@ -211,7 +222,7 @@ jobs:
             org.opencontainers.image.title=${{ matrix.image }}
             org.opencontainers.image.url=https://github.com/${{ github.repository }}/tree/${{ github.sha }}
             org.opencontainers.image.vendor=${{ github.repository_owner }}
-            org.opencontainers.image.version=${{ matrix.lts && env.LTS_VERSION || env.FEDORA_VERSION }}.${{ needs.prepare.outputs.date_tag }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.date_tag }}
             containers.bootc=1
           sep-tags: ' '
           sep-annotations: ' '

@@ -21,7 +21,7 @@ build target=image_name tag="latest":
     podman build \
         --pull=newer \
         --build-arg FEDORA_VERSION={{ fedora_version }} \
-        --label org.opencontainers.image.version={{ fedora_version }}.$(date -u +%Y%m%d).0 \
+        --label org.opencontainers.image.version=$(date -u +%Y%m%d).0 \
         --target {{ target }} \
         --tag {{ target }}:{{ tag }} \
         .

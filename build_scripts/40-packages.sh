@@ -2,7 +2,7 @@
 
 set -ouex pipefail
 
-dnf5 -y install distrobox
+dnf5 -y install distrobox zsh
 
 # tailscale ships disabled, enable with: systemctl enable --now tailscaled
 dnf5 -y config-manager addrepo --from-repofile=https://pkgs.tailscale.com/stable/fedora/tailscale.repo
