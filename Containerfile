@@ -30,6 +30,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
 
 FROM base AS kuubik
 ARG IMAGE_VERSION=""
+LABEL org.opencontainers.image.version=${IMAGE_VERSION}
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/var \
@@ -46,6 +47,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
 # after the driver install, nvidia packages ship their own 99-nvidia.conf
 COPY system_files/nvidia /
 ARG IMAGE_VERSION=""
+LABEL org.opencontainers.image.version=${IMAGE_VERSION}
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/var \
@@ -67,6 +69,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
 
 FROM lts-base AS kuubik-lts
 ARG IMAGE_VERSION=""
+LABEL org.opencontainers.image.version=${IMAGE_VERSION}
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/var \
@@ -83,6 +86,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
 # after the driver install, nvidia packages ship their own 99-nvidia.conf
 COPY system_files/nvidia /
 ARG IMAGE_VERSION=""
+LABEL org.opencontainers.image.version=${IMAGE_VERSION}
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/var \
