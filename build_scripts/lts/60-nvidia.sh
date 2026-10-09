@@ -15,7 +15,7 @@ dnf -y install akmods nvtop
 # akmod-nvidia's %post builds via akmodsbuild, which refuses to run as root.
 # install it without scriptlets before the driver stack pulls it in normally
 dnf -y install --setopt=tsflags=noscripts akmod-nvidia
-dnf -y install nvidia-driver nvidia-driver-cuda nvidia-settings nvidia-xconfig libnvidia-fbc
+dnf -y install nvidia-driver nvidia-driver-cuda nvidia-settings libnvidia-fbc
 akmods --force --kernels "${KERNEL_VERSION}" --kmod nvidia
 
 # akmods exits 0 even when the build fails
