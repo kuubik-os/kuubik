@@ -32,7 +32,16 @@ def test_no_failed_system_units(
         for line in result.stdout.splitlines()
         if line.strip() and line.split()[0] not in NO_GPU_EXPECTED_FAILED_UNITS
     ]
-    assert failed == [], f"unexpected failed system units: {result.stdout}"
+    details = ""
+    if failed:
+        units = " ".join(line.split()[0] for line in failed)
+        # status exits non-zero for failed units
+        details = ssh_command(
+            f"systemctl status --no-pager --full {units}; "
+            f"sudo journalctl -b --no-pager -o short-precise -u {units.replace(' ', ' -u ')}",
+            check=False,
+        ).stdout
+    assert failed == [], f"unexpected failed system units: {result.stdout}\n{details}"
 
 
 def test_no_failed_user_units(ssh_command):
