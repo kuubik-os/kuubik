@@ -23,6 +23,7 @@ for plugin in "${zsh_plugins[@]}"; do
 done
 
 systemctl enable brew-setup.service
+systemctl enable kuubik-flatpak-init.service
 echo 'HOMEBREW_NO_AUTO_UPDATE=1' >>/etc/environment
 
 # updates are manual via kctl, the timer only notifies

@@ -1,0 +1,11 @@
+[Unit]
+Description=Initialize the system flatpak repo with flathub
+ConditionPathExists=!/var/lib/flatpak/repo
+
+# the el base has no fedora-style repo setup service, so non-root flatpak fails until root creates the repo
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flatpak remote-add --system --if-not-exists flathub /etc/flatpak/remotes.d/flathub.flatpakrepo
+
+[Install]
+WantedBy=multi-user.target
