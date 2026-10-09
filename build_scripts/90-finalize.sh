@@ -26,8 +26,10 @@ DRACUT_NO_XATTR=1 /usr/bin/dracut \
 	-f "/usr/lib/modules/$KERNEL_VERSION/initramfs.img"
 chmod 0600 "/usr/lib/modules/$KERNEL_VERSION/initramfs.img"
 
-dnf5 -y remove kernel-cachyos-lto-devel-matched
-dnf5 -y clean all
+# dnf5 on fedora, dnf4 on the lts base
+DNF=$(command -v dnf5 || command -v dnf)
+"$DNF" -y remove "kernel-cachyos-*-devel-matched"
+"$DNF" -y clean all
 
 rm -rfv /etc/yum.repos.d/*cachyos*
 rm -rfv /run/akmods /run/dnf /run/selinux-policy /tmp/*

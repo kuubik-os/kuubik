@@ -27,13 +27,26 @@ reboot, and then:
 rpm-ostree rebase ostree-image-signed:docker://ghcr.io/kuubik-os/kuubik-nvidia
 ```
 
+## lts
+lts images built on rhel/alma 10 instead of fedora. rebase same way, using `kuubik-lts` or `kuubik-lts-nvidia`:
+
+```bash
+rpm-ostree rebase ostree-unverified-registry:ghcr.io/kuubik-os/kuubik-lts
+```
+
+reboot, and then:
+```bash
+rpm-ostree rebase ostree-image-signed:docker://ghcr.io/kuubik-os/kuubik-lts
+```
+
 ## credits
 
 all of that work is based on other OSS projects. Huge thanks to:
 
-https://github.com/ublue-os/bazzite/
+https://github.com/ublue-os
 
-https://fedoraproject.org/atomic-desktops/kinoite/download/
+https://fedoraproject.org/atomic-desktops/kinoite
 
-https://rpmfusion.org/
+https://rpmfusion.org
 
+https://negativo17.org/

@@ -23,6 +23,24 @@
                         "type": "matchRepository"
                     }
                 }
+            ],
+            "ghcr.io/kuubik-os/kuubik-lts": [
+                {
+                    "type": "sigstoreSigned",
+                    "keyPath": "/etc/pki/containers/kuubik.pub",
+                    "signedIdentity": {
+                        "type": "matchRepository"
+                    }
+                }
+            ],
+            "ghcr.io/kuubik-os/kuubik-lts-nvidia": [
+                {
+                    "type": "sigstoreSigned",
+                    "keyPath": "/etc/pki/containers/kuubik.pub",
+                    "signedIdentity": {
+                        "type": "matchRepository"
+                    }
+                }
             ]
         },
         "docker-daemon": {

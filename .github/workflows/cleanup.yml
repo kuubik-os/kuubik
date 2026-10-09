@@ -19,7 +19,7 @@ jobs:
         uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          packages: kuubik,kuubik-nvidia
+          packages: kuubik,kuubik-nvidia,kuubik-lts,kuubik-lts-nvidia
           older-than: 30 days
           delete-orphaned-images: true
           keep-n-tagged: 7

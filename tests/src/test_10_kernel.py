@@ -15,7 +15,7 @@ def test_kernel(ssh_command):
 
 
 def test_kernel_versionlock(ssh_command):
-    result = ssh_command("dnf5 versionlock list")
-    assert "kernel-cachyos-lto" in result.stdout, (
-        f"expected kernel-cachyos-lto to be versionlocked, actual: {result.stdout}"
+    result = ssh_command("$(command -v dnf5 || command -v dnf) versionlock list")
+    assert "kernel-cachyos" in result.stdout, (
+        f"expected kernel-cachyos to be versionlocked, actual: {result.stdout}"
     )
