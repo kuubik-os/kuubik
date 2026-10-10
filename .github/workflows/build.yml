@@ -110,7 +110,6 @@ jobs:
 
     permissions:
       contents: read
-      packages: write
 
     steps:
       - name: Checkout
@@ -126,10 +125,18 @@ jobs:
             --build-arg IMAGE_VERSION=${{ needs.prepare.outputs.date_tag }} \
             --tag raw-img .
 
-      - name: Push scratch image to GHCR
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | sudo buildah login --username "${{ github.actor }}" --password-stdin ghcr.io
-          sudo buildah push raw-img "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:ci-${{ github.run_id }}"
+      # pass image to later jobs as artifact so PR runs never write to GHCR
+      - name: Export image
+        run: sudo podman save --format oci-archive localhost/raw-img:latest | zstd -T0 -3 > raw-img.tar.zst
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: image-${{ matrix.flavor }}
+          path: raw-img.tar.zst
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
 
   test_image:
     name: Test image (${{ matrix.flavor }})
@@ -144,7 +151,6 @@ jobs:
 
     permissions:
       contents: read
-      packages: read
 
     steps:
       - name: Checkout
@@ -164,13 +170,18 @@ jobs:
           tar -xzf "${just_archive}" just
           sudo install -m 0755 just /usr/local/bin/just
 
-      - name: Pull scratch image
+      - name: Download image artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: image-${{ matrix.flavor }}
+
+      - name: Load image
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login --username "${{ github.actor }}" --password-stdin ghcr.io
-          sudo podman pull "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:ci-${{ github.run_id }}"
+          zstd -dc raw-img.tar.zst | sudo podman load
+          rm raw-img.tar.zst
 
       - name: Run integration tests
-        run: just test "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:ci-${{ github.run_id }}"
+        run: just test localhost/raw-img:latest
 
       - name: Upload test results
         if: always()
@@ -186,6 +197,7 @@ jobs:
   publish_image:
     name: Rechunk and publish (${{ matrix.flavor }})
     needs: [prepare, build_image, test_image]
+    if: github.event_name != 'pull_request'
 
     strategy:
       fail-fast: true
@@ -227,12 +239,15 @@ jobs:
           sep-tags: ' '
           sep-annotations: ' '
 
-      - name: Pull scratch image
+      - name: Download image artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: image-${{ matrix.flavor }}
+
+      - name: Load image
         run: |
-          scratch_ref="${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:ci-${{ github.run_id }}"
-          echo "${{ secrets.GITHUB_TOKEN }}" | sudo buildah login --username "${{ github.actor }}" --password-stdin ghcr.io
-          sudo buildah pull "${scratch_ref}"
-          sudo buildah tag "${scratch_ref}" raw-img
+          zstd -dc raw-img.tar.zst | sudo podman load
+          rm raw-img.tar.zst
 
       - name: Run Rechunker
         id: rechunk
@@ -290,24 +305,3 @@ jobs:
           COSIGN_EXPERIMENTAL: false
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
 
-  cleanup_scratch_images:
-    name: Clean up scratch CI image (${{ matrix.flavor }})
-    if: always()
-    needs: [build_image, test_image, publish_image]
-
-    strategy:
-      matrix: *flavors
-
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-
-    permissions:
-      packages: write
-
-    steps:
-      - name: Delete scratch CI image
-        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          packages: ${{ matrix.image }}
-          tags: ci-${{ github.run_id }}
