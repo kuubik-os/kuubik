@@ -2,7 +2,7 @@
 
 set -ouex pipefail
 
-dnf -y install distrobox zsh
+dnf -y install distrobox git zsh
 
 # tailscale ships disabled, enable with: systemctl enable --now tailscaled
 dnf config-manager --add-repo "https://pkgs.tailscale.com/stable/rhel/$(rpm -E %rhel)/tailscale.repo"
