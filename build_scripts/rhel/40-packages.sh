@@ -18,3 +18,6 @@ systemctl enable ananicy-cpp.service
 
 # rpm's /var/log/tuned is lost with the build tmpfs /var, tmpfiles recreates it with the tuned_log_t label tuned-ppd needs
 echo 'd /var/log/tuned 0755 root root -' >/usr/lib/tmpfiles.d/kuubik-tuned.conf
+
+# el has no fedora-style flatpak repo setup service, see kuubik-flatpak-init.service
+systemctl enable kuubik-flatpak-init.service

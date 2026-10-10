@@ -50,7 +50,7 @@ jobs:
       - name: run shellcheck checker
         run: |
           find . -iname "*.sh" -type f -exec shellcheck {} +
-          shellcheck system_files/base/usr/bin/kctl system_files/base/usr/libexec/kctl-update-check
+          shellcheck system_files/shared/usr/bin/kctl system_files/shared/usr/libexec/kctl-update-check
 
   prepare:
     name: Compute build metadata
