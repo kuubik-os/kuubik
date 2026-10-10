@@ -16,12 +16,12 @@ clean:
 format:
     find . -iname '*.sh' -type f -exec shfmt --write {} +
 
-# build a container image target (kuubik or kuubik-nvidia)
+# build a container image target (kuubik, kuubik-nvidia, kuubik-lts or kuubik-lts-nvidia)
 build target=image_name tag="latest":
     podman build \
         --pull=newer \
         --build-arg FEDORA_VERSION={{ fedora_version }} \
-        --label org.opencontainers.image.version={{ fedora_version }}.$(date -u +%Y%m%d).0 \
+        --label org.opencontainers.image.version=$(date -u +%Y%m%d).0 \
         --target {{ target }} \
         --tag {{ target }}:{{ tag }} \
         .
@@ -135,14 +135,16 @@ test image:
         -v "${PWD}/test-results:/tmp/test-results:Z" \
         kuubik-test-runner
 
-# build an image locally and run the integration tests against it (flavor: empty or nvidia)
+# build an image locally and run the integration tests against it (flavor: empty, nvidia, lts or lts-nvidia)
 test-vm flavor="":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{ flavor }}" in
     "") target="{{ image_name }}" ;;
     nvidia) target="{{ image_name }}-nvidia" ;;
-    *) echo "Usage: just test-vm [nvidia]" >&2; exit 1 ;;
+    lts) target="{{ image_name }}-lts" ;;
+    lts-nvidia) target="{{ image_name }}-lts-nvidia" ;;
+    *) echo "Usage: just test-vm [nvidia|lts|lts-nvidia]" >&2; exit 1 ;;
     esac
     sudo "$(command -v just)" build "${target}"
     just test "localhost/${target}:latest"

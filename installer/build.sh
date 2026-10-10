@@ -36,6 +36,7 @@ mkdir -p /tmp/anaconda_custom_logs
 ostreecontainer --url=${INSTALL_IMAGE_PAYLOAD} --transport=containers-storage --no-signature-verification
 %include /usr/share/anaconda/post-scripts/switch-to-signed.ks
 %include /usr/share/anaconda/post-scripts/restore-selinux-labels.ks
+%include /usr/share/anaconda/post-scripts/zsh-default-shell.ks
 KSEOF
 
 # point installed system at signed registry image for updates

@@ -6,7 +6,7 @@
 
 set -uo pipefail
 
-VERSION_RE='^[0-9]+\.([0-9]{8})\.[0-9]+$'
+VERSION_RE='^([0-9]{8})\.[0-9]+$'
 
 status_json="$(rpm-ostree status --json)" || exit 0
 
@@ -27,8 +27,9 @@ latest_version="$(skopeo inspect --no-tags "docker://${pullspec}" 2>/dev/null |
 [[ "$latest_version" =~ $VERSION_RE ]] || exit 0
 latest_date="${BASH_REMATCH[1]}"
 
-current_epoch="$(date -d "$current_date" +%s)" || exit 0
-latest_epoch="$(date -d "$latest_date" +%s)" || exit 0
+# utc, so a dst change between the two dates can't drop a day
+current_epoch="$(date -u -d "$current_date" +%s)" || exit 0
+latest_epoch="$(date -u -d "$latest_date" +%s)" || exit 0
 age_days=$(((latest_epoch - current_epoch) / 86400))
 
 [ "$age_days" -ge 30 ] || exit 0
