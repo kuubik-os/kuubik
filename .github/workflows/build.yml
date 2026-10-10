@@ -83,12 +83,12 @@ jobs:
           echo "date_tag=${day//-/}.${seq}" >> "$GITHUB_OUTPUT"
 
   build_image:
-    name: Build image (${{ matrix.flavor }})
+    name: ${{ github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && 'Build, test, publish' || 'Build and test' }} (${{ matrix.flavor }})
     needs: prepare
 
     strategy:
       fail-fast: true
-      matrix: &flavors
+      matrix:
         include:
           - flavor: kuubik
             image: kuubik
@@ -106,53 +106,24 @@ jobs:
             lts: true
 
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 180
 
     permissions:
       contents: read
+      packages: write
+      id-token: write
+
+    env:
+      # only main builds are pushed, PR runs build and test locally
+      PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
-
-      - name: Build production image
-        run: |
-          sudo buildah build \
-            --target ${{ matrix.image }} \
-            --file Containerfile \
-            --build-arg FEDORA_VERSION=${{ env.FEDORA_VERSION }} \
-            --build-arg LTS_VERSION=${{ env.LTS_VERSION }} \
-            --build-arg IMAGE_VERSION=${{ needs.prepare.outputs.date_tag }} \
-            --tag raw-img .
-
-      # pass image to later jobs as artifact so PR runs never write to GHCR
-      - name: Export image
-        run: sudo podman save --format oci-archive localhost/raw-img:latest | zstd -T0 -3 > raw-img.tar.zst
-
-      - name: Upload image artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      # build, test vm disk and rechunk all share one runner disk
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
         with:
-          name: image-${{ matrix.flavor }}
-          path: raw-img.tar.zst
-          if-no-files-found: error
-          retention-days: 1
-          compression-level: 0
+          tool-cache: true
 
-  test_image:
-    name: Test image (${{ matrix.flavor }})
-    needs: build_image
-
-    strategy:
-      fail-fast: true
-      matrix: *flavors
-
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-
-    permissions:
-      contents: read
-
-    steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
 
@@ -169,16 +140,17 @@ jobs:
           echo "${just_sha256}  ${just_archive}" | sha256sum --check
           tar -xzf "${just_archive}" just
           sudo install -m 0755 just /usr/local/bin/just
+          rm "${just_archive}" just
 
-      - name: Download image artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: image-${{ matrix.flavor }}
-
-      - name: Load image
+      - name: Build production image
         run: |
-          zstd -dc raw-img.tar.zst | sudo podman load
-          rm raw-img.tar.zst
+          sudo buildah build \
+            --target ${{ matrix.image }} \
+            --file Containerfile \
+            --build-arg FEDORA_VERSION=${{ env.FEDORA_VERSION }} \
+            --build-arg LTS_VERSION=${{ env.LTS_VERSION }} \
+            --build-arg IMAGE_VERSION=${{ needs.prepare.outputs.date_tag }} \
+            --tag raw-img .
 
       - name: Run integration tests
         run: just test localhost/raw-img:latest
@@ -194,28 +166,37 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  publish_image:
-    name: Rechunk and publish (${{ matrix.flavor }})
-    needs: [prepare, build_image, test_image]
-    if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+      - name: Remove test leftovers
+        if: env.PUBLISH == 'true'
+        run: |
+          sudo rm -rf output
+          sudo podman rmi -f localhost/kuubik-test:latest localhost/kuubik-test-runner:latest
 
-    strategy:
-      fail-fast: true
-      matrix: *flavors
+      # rechunk deletes raw-img, so collect release info first
+      - name: Collect release info
+        if: env.PUBLISH == 'true'
+        run: |
+          mkdir -p release
+          sudo podman run --rm --entrypoint /bin/sh localhost/raw-img:latest -c \
+            'rpm -qa --qf "%{NAME} %{VERSION}-%{RELEASE}\n" | grep -v "^gpg-pubkey " | LC_ALL=C sort -u' \
+            > "release/packages-${{ matrix.image }}.txt"
+          {
+            echo "base: ${{ matrix.lts && format('AlmaLinux {0}', env.LTS_VERSION) || format('Fedora {0}', env.FEDORA_VERSION) }}"
+            echo "kernel: $(sudo podman run --rm --entrypoint /bin/ls localhost/raw-img:latest /usr/lib/modules)"
+            echo "plasma: $(sudo podman run --rm --entrypoint /usr/bin/rpm localhost/raw-img:latest -q --qf '%{VERSION}' plasma-workspace)"
+          } > "release/meta-${{ matrix.image }}.txt"
 
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+      - name: Upload release info
+        if: env.PUBLISH == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-${{ matrix.flavor }}
+          path: release/
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Image Metadata
+        if: env.PUBLISH == 'true'
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         id: metadata
         with:
@@ -237,19 +218,10 @@ jobs:
           sep-tags: ' '
           sep-annotations: ' '
 
-      - name: Download image artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: image-${{ matrix.flavor }}
-
-      - name: Load image
-        run: |
-          zstd -dc raw-img.tar.zst | sudo podman load
-          rm raw-img.tar.zst
-
       - name: Run Rechunker
+        if: env.PUBLISH == 'true'
         id: rechunk
-        uses: ublue-os/legacy-rechunk@v1.0.0
+        uses: ublue-os/legacy-rechunk@a925083d9af7cb04b3e2a6e8c01bfa495f38b710 # v1.0.0
         with:
           rechunk: 'ghcr.io/ublue-os/legacy-rechunk:v1.0.0-x86_64'
           ref: 'raw-img'
@@ -259,15 +231,17 @@ jobs:
           labels: '${{ steps.metadata.outputs.labels }}'
 
       - name: Load in podman and tag
+        if: env.PUBLISH == 'true'
         run: |
           sudo chown -R "$(id -u):$(id -g)" "/run/user/$(id -u)" 2>/dev/null || true
           IMAGE=$(podman pull ${{ steps.rechunk.outputs.ref }})
-          sudo rm -rf ${{ steps.rechunk.outputs.output }}
+          sudo rm -rf ${{ steps.rechunk.outputs.location }}
           for tag in ${{ steps.metadata.outputs.tags }}; do
             podman tag $IMAGE "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:$tag"
           done
 
       - name: Login to GitHub Container Registry
+        if: env.PUBLISH == 'true'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
         with:
           registry: ghcr.io
@@ -275,6 +249,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push To GHCR
+        if: env.PUBLISH == 'true'
         run: |
           for tag in ${{ steps.metadata.outputs.tags }}; do
             for attempt in 1 2 3 4 5; do
@@ -286,11 +261,13 @@ jobs:
           done
 
       - name: Install Cosign
+        if: env.PUBLISH == 'true'
         uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
         with:
           cosign-release: "v2.6.1"
 
       - name: Sign container image
+        if: env.PUBLISH == 'true'
         run: |
           for tag in ${{ steps.metadata.outputs.tags }}; do
             cosign sign -y --key env://COSIGN_PRIVATE_KEY "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:$tag"
@@ -299,3 +276,87 @@ jobs:
           COSIGN_EXPERIMENTAL: false
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
 
+  release:
+    name: Create GitHub release
+    needs: [prepare, build_image]
+    if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    permissions:
+      contents: write
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.prepare.outputs.date_tag }}
+
+    steps:
+      - name: Download release info
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: new
+
+      # package lists of the previous release are the base for the changelog
+      - name: Download previous package lists
+        run: |
+          gh release download --repo "${{ github.repository }}" --pattern 'packages-*.txt' --dir prev \
+            || echo "no previous release found"
+
+      - name: Write release notes
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          max_lines=300
+          for meta in new/meta-*.txt; do
+            image="$(basename "${meta}" .txt)"
+            image="${image#meta-}"
+            new="new/packages-${image}.txt"
+            prev="prev/packages-${image}.txt"
+
+            echo "## ${image}"
+            echo
+            echo "- image: \`${{ env.IMAGE_REGISTRY }}/${image}:${TAG}\`"
+            sed 's/^/- /' "${meta}"
+            echo
+
+            if [[ ! -f "${prev}" ]]; then
+              echo "no previous release to compare against"
+              echo
+              continue
+            fi
+
+            changes="$({
+              join "${prev}" "${new}" | awk '$2 != $3 { print "~ " $1 " " $2 " -> " $3 }'
+              join -v2 "${prev}" "${new}" | sed 's/^/+ /'
+              join -v1 "${prev}" "${new}" | sed 's/^/- /'
+            } | sort -k2,2)"
+
+            if [[ -z "${changes}" ]]; then
+              echo "no package changes"
+              echo
+              continue
+            fi
+
+            echo "<details><summary>package changes ($(wc -l <<<"${changes}"))</summary>"
+            echo
+            echo '```diff'
+            head -n "${max_lines}" <<<"${changes}"
+            echo '```'
+            if (( $(wc -l <<<"${changes}") > max_lines )); then
+              echo "truncated, compare the attached packages-${image}.txt files for the full list"
+            fi
+            echo
+            echo "</details>"
+            echo
+          done | tee notes.md
+
+      - name: Create release
+        run: |
+          gh release create "${TAG}" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "kuubik ${TAG}" \
+            --notes-file notes.md \
+            new/packages-*.txt
