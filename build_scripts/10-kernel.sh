@@ -2,7 +2,7 @@
 
 set -ouex pipefail
 
-# per-RUN tmpfs mounts don't come up 1777
+# per-RUN tmpfs mounts don't come up 1777 
 mkdir -p /var/tmp /tmp
 chmod 1777 /var/tmp /tmp
 
