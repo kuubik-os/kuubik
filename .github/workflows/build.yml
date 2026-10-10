@@ -142,9 +142,24 @@ jobs:
           sudo install -m 0755 just /usr/local/bin/just
           rm "${just_archive}" just
 
+      # registry sometimes drop connections during pull, so do it in advance with retries
+      - name: Pull base images
+        run: |
+          for image in \
+            ghcr.io/ublue-os/brew:latest \
+            ${{ matrix.lts && format('quay.io/almalinuxorg/atomic-desktop-kde:{0}', env.LTS_VERSION) || format('quay.io/fedora-ostree-desktops/kinoite:{0}', env.FEDORA_VERSION) }}; do
+            for attempt in 1 2 3 4 5; do
+              sudo buildah pull "${image}" && break
+              [ "$attempt" -lt 5 ] || exit 1
+              echo "pull of ${image} failed, retrying in 30s"
+              sleep 30
+            done
+          done
+
       - name: Build production image
         run: |
           sudo buildah build \
+            --pull=missing \
             --target ${{ matrix.image }} \
             --file Containerfile \
             --build-arg FEDORA_VERSION=${{ env.FEDORA_VERSION }} \
