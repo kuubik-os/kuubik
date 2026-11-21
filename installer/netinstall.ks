@@ -14,6 +14,9 @@ echo "ostreecontainer --url=@REGISTRY@/${image}:latest --transport=registry --no
 
 %include /tmp/kuubik-image.ks
 
+# root stays locked; rootpw in the kickstart hides the root spoke and makes the ui require an admin user
+rootpw --lock
+
 # point installed system at signed registry image for updates
 %post --erroronfail --log=/tmp/anaconda_custom_logs/bootc-switch.log
 image=kuubik

@@ -3,8 +3,18 @@
 list of changes: https://kuubik-os.github.io/
 
 
+## images
+- `kuubik`: fedora kinoite based
+- `kuubik-nvidia`: `kuubik` with nvidia driver
+- `kuubik-lts`: rhel/alma 10 based
+- `kuubik-lts-nvidia`: `kuubik-lts` with nvidia driver
+
 ## install
-to use it firstly install fedora kinoite, and switch to unsigned image first:
+### iso
+download the [netinstall ISO](https://github.com/kuubik-os/kuubik/releases/download/netinstall/kuubik-netinstall-amd64.iso), boot it and pick the image in the boot menu. it installs that image over the network, so it needs internet. works with secure boot on, see [secure boot](#secure-boot).
+
+### rebase
+from an existing fedora kinoite install, switch to the unsigned image first (replace `kuubik` with the image you want):
 
 ```bash
 rpm-ostree rebase ostree-unverified-registry:ghcr.io/kuubik-os/kuubik
@@ -16,33 +26,9 @@ rpm-ostree rebase ostree-image-signed:docker://ghcr.io/kuubik-os/kuubik
 ```
 
 ## secure boot
-kernel and nvidia driver are signed with the kuubik key. on secure boot devices install with the netinstall ISO (artifacts of the "Build network install ISO" workflow). it boots with secure boot on, you pick the flavor in its boot menu, it installs that image over the network and queues the key: on first reboot pick "Enroll MOK" and enter password `kuubik`.
-
-on an existing install, run `kctl enroll-secure-boot-key`, reboot, enroll, then enable secure boot.
-
-## nvidia
-for nvidia version, use nvidia image name:
-
-```bash
-rpm-ostree rebase ostree-unverified-registry:ghcr.io/kuubik-os/kuubik-nvidia
-```
-
-reboot, and then:
-```bash
-rpm-ostree rebase ostree-image-signed:docker://ghcr.io/kuubik-os/kuubik-nvidia
-```
-
-## lts
-lts images built on rhel/alma 10 instead of fedora. rebase same way, using `kuubik-lts` or `kuubik-lts-nvidia`:
-
-```bash
-rpm-ostree rebase ostree-unverified-registry:ghcr.io/kuubik-os/kuubik-lts
-```
-
-reboot, and then:
-```bash
-rpm-ostree rebase ostree-image-signed:docker://ghcr.io/kuubik-os/kuubik-lts
-```
+kernel and nvidia driver are signed with the kuubik key, which has to be enrolled once:
+- ISO install: the key is queued during install. on first reboot pick "Enroll MOK" and enter password `kuubik`.
+- rebase install: run `kctl enroll-secure-boot-key`, reboot, enroll, then enable secure boot.
 
 ## credits
 
