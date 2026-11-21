@@ -43,7 +43,8 @@ def test_kctl_update_notify_timer_enabled(ssh_command):
 
 
 # the test image tracks a local ref, so stub rpm-ostree and skopeo to look like
-# a ghcr install and notify-send to record whether it fired
+# a ghcr install, notify-send to record whether it fired and click "Update now",
+# and systemd-run to record what the click launches
 @pytest.mark.parametrize(("latest", "notified"), [("20260131.0", True), ("20260130.2", False)])
 def test_kctl_update_check_notifies_after_30_days(ssh_command, latest, notified):
     status = (
@@ -54,7 +55,8 @@ def test_kctl_update_check_notifies_after_30_days(ssh_command, latest, notified)
     stubs = {
         "rpm-ostree": f"#!/bin/sh\necho {shlex.quote(status)}\n",
         "skopeo": f"#!/bin/sh\necho {shlex.quote(inspect)}\n",
-        "notify-send": f'#!/bin/sh\necho "$*" >{STUB_DIR}/notified\n',
+        "notify-send": f'#!/bin/sh\necho "$*" >{STUB_DIR}/notified\necho update\n',
+        "systemd-run": f'#!/bin/sh\necho "$*" >{STUB_DIR}/launched\n',
     }
     ssh_command(
         f"rm -rf {STUB_DIR} && mkdir -p {STUB_DIR} && "
@@ -66,3 +68,6 @@ def test_kctl_update_check_notifies_after_30_days(ssh_command, latest, notified)
     ssh_command(f"PATH={STUB_DIR}:$PATH timeout 30 /usr/libexec/kctl-update-check")
     fired = ssh_command(f"test -f {STUB_DIR}/notified", check=False).returncode == 0
     assert fired == notified, f"latest {latest}: notification fired={fired}, expected {notified}"
+    launched = ssh_command(f"cat {STUB_DIR}/launched", check=False).stdout.strip()
+    expected = "--user konsole --hold -e kctl upgrade" if notified else ""
+    assert launched == expected, f"latest {latest}: launched {launched!r}"

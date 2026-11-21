@@ -6,34 +6,7 @@
     ],
     "transports": {
         "docker": {
-            "ghcr.io/kuubik-os/kuubik": [
-                {
-                    "type": "sigstoreSigned",
-                    "keyPath": "/etc/pki/containers/kuubik.pub",
-                    "signedIdentity": {
-                        "type": "matchRepository"
-                    }
-                }
-            ],
-            "ghcr.io/kuubik-os/kuubik-nvidia": [
-                {
-                    "type": "sigstoreSigned",
-                    "keyPath": "/etc/pki/containers/kuubik.pub",
-                    "signedIdentity": {
-                        "type": "matchRepository"
-                    }
-                }
-            ],
-            "ghcr.io/kuubik-os/kuubik-lts": [
-                {
-                    "type": "sigstoreSigned",
-                    "keyPath": "/etc/pki/containers/kuubik.pub",
-                    "signedIdentity": {
-                        "type": "matchRepository"
-                    }
-                }
-            ],
-            "ghcr.io/kuubik-os/kuubik-lts-nvidia": [
+            "ghcr.io/kuubik-os": [
                 {
                     "type": "sigstoreSigned",
                     "keyPath": "/etc/pki/containers/kuubik.pub",

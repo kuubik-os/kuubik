@@ -1,6 +1,5 @@
 [Unit]
 Description=Check for and notify about system updates
-After=network-online.target
 
 [Service]
 Type=oneshot

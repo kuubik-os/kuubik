@@ -12,5 +12,5 @@ systemctl disable tailscaled.service
 printf '%s\n' 'TS_NO_LOGS_NO_SUPPORT=true' >>/etc/default/tailscaled
 
 dnf5 -y install --nogpgcheck --repofrompath "terra,https://repos.fyralabs.com/terra\$releasever" terra-release
-dnf5 -y --setopt=terra.gpgcheck=0 install ubuntumono-nerd-fonts jetbrainsmono-nerd-fonts
+dnf5 -y install ubuntumono-nerd-fonts jetbrainsmono-nerd-fonts
 dnf5 -y remove terra-release terra-gpg-keys

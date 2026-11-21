@@ -12,7 +12,6 @@ status_json="$(rpm-ostree status --json)" || exit 0
 
 current_version="$(jq -r '.deployments[] | select(.booted) | .version // empty' <<<"$status_json")"
 image_ref="$(jq -r '.deployments[] | select(.booted) | .["container-image-reference"] // empty' <<<"$status_json")"
-[ -n "$current_version" ] && [ -n "$image_ref" ] || exit 0
 
 [[ "$current_version" =~ $VERSION_RE ]] || exit 0
 current_date="${BASH_REMATCH[1]}"
@@ -22,7 +21,6 @@ pullspec="ghcr.io/${image_ref#*ghcr.io/}"
 
 latest_version="$(skopeo inspect --no-tags "docker://${pullspec}" 2>/dev/null |
 	jq -r '.Labels["org.opencontainers.image.version"] // empty')"
-[ -n "$latest_version" ] || exit 0
 
 [[ "$latest_version" =~ $VERSION_RE ]] || exit 0
 latest_date="${BASH_REMATCH[1]}"
@@ -43,5 +41,6 @@ action="$(timeout 6h notify-send \
 	"This system is running a build from ${current_date}, more than a month behind the latest available update.")"
 
 if [ "$action" = "update" ]; then
-	konsole -e kctl upgrade &
+	# own unit, a oneshot service kills leftover processes when the script exits
+	systemd-run --user konsole --hold -e kctl upgrade
 fi
