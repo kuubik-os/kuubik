@@ -1,22 +1,80 @@
 import subprocess
 from typing import Callable
 
+import pytest
 
-def test_graphical_session_exists(ssh_command):
-    result = ssh_command(
-        "loginctl show-session $(loginctl | awk '/seat0/ {print $1}') -p Type"
+from defaults import SESSION_ENV, TEST_USER
+
+
+@pytest.fixture(autouse=True)
+def _session(desktop_session):
+    pass
+
+
+def test_graphical_session_is_user_plasma(ssh_command):
+    session = ssh_command(f"loginctl show-user {TEST_USER} -p Display --value").stdout.strip()
+    assert session, f"{TEST_USER} has no graphical session"
+    result = ssh_command(f"loginctl show-session {session} -p Type -p Class -p Active")
+    props = dict(line.split("=", 1) for line in result.stdout.split())
+    assert props == {"Type": "wayland", "Class": "user", "Active": "yes"}, (
+        f"unexpected graphical session: {props}"
     )
-    assert "Type=wayland" in result.stdout, (
-        f"No active graphical session found: {result.stdout}"
-    )
+
+
+@pytest.mark.parametrize("process", ["plasmashell", "kwin_wayland", "xdg-desktop-portal-kde"])
+def test_desktop_process_running(ssh_command, wait_for, process):
+    # the portal is dbus activated, so poke it first
+    if process == "xdg-desktop-portal-kde":
+        ssh_command(
+            f"{SESSION_ENV} busctl --user call org.freedesktop.portal.Desktop "
+            "/org/freedesktop/portal/desktop org.freedesktop.DBus.Peer Ping",
+            check=False,
+        )
+    wait_for(f"pgrep -u {TEST_USER} -x {process}", timeout=60)
+
+
+def test_notification_delivered(ssh_command):
+    # kctl-update-check relies on this
+    ssh_command(f"{SESSION_ENV} notify-send --transient --expire-time=1000 kuubik-test hello")
+
+
+@pytest.mark.parametrize("unit", ["pipewire.service", "pipewire-pulse.service", "wireplumber.service"])
+def test_audio_stack_active(ssh_command, unit):
+    result = ssh_command(f"{SESSION_ENV} systemctl --user is-active {unit}", check=False)
+    assert result.stdout.strip() == "active", f"{unit}: {result.stdout.strip()}"
+
+
+def test_audio_server_responds(ssh_command):
+    result = ssh_command(f"{SESSION_ENV} wpctl status")
+    assert "PipeWire" in result.stdout, f"unexpected wpctl status: {result.stdout}"
 
 
 def test_ananicy_running(ssh_command):
-    result = ssh_command("systemctl is-active ananicy-cpp")
-    actual_state = result.stdout.strip()
-    assert actual_state == "active", (
-        f"ananicy-cpp expected to be active, actual state: {actual_state}. Full response: {result.stdout}"
+    result = ssh_command("systemctl is-active ananicy-cpp", check=False)
+    assert result.stdout.strip() == "active", f"ananicy-cpp: {result.stdout.strip()}"
+
+
+def test_bluetooth_enabled(ssh_command):
+    result = ssh_command("systemctl is-enabled bluetooth.service", check=False)
+    assert result.stdout.strip() == "enabled", f"bluetooth.service: {result.stdout.strip()}"
+
+
+def test_selinux_enforcing(ssh_command):
+    result = ssh_command("getenforce")
+    assert result.stdout.strip() == "Enforcing", f"selinux: {result.stdout.strip()}"
+
+
+def test_no_selinux_denials(ssh_command):
+    # ausearch exits 1 when nothing matches
+    result = ssh_command("sudo ausearch -m AVC,USER_AVC -ts boot -i", check=False)
+    assert "type=AVC" not in result.stdout and "type=USER_AVC" not in result.stdout, (
+        f"selinux denials this boot:\n{result.stdout}"
     )
+
+
+def test_no_coredumps(ssh_command):
+    result = ssh_command("sudo coredumpctl list --no-legend --no-pager", check=False)
+    assert result.stdout.strip() == "", f"crashes this boot:\n{result.stdout}"
 
 
 # nvidia-cdi-refresh runs nvidia-smi, which always fails without GPU
