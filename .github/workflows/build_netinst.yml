@@ -19,7 +19,7 @@ on:
 
   # iso pulls the latest image at install time, rebuild only to keep the artifact from expiring
   schedule:
-    - cron: '0 6 1 * *'
+    - cron: '0 6 1 */2 *'
 
   workflow_dispatch:
 
