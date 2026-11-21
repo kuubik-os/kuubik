@@ -157,8 +157,17 @@ jobs:
           done
 
       - name: Build production image
+        env:
+          SECUREBOOT_KEY: ${{ secrets.SECUREBOOT_KEY }}
         run: |
+          # empty for fork PRs, the build then skips secure boot signing
+          (umask 077 && printf '%s' "${SECUREBOOT_KEY}" > secureboot.key)
+          if [[ "${PUBLISH}" == "true" && ! -s secureboot.key ]]; then
+            echo "SECUREBOOT_KEY secret is required to publish" >&2
+            exit 1
+          fi
           sudo buildah build \
+            --secret id=secureboot_key,src=secureboot.key \
             --pull=missing \
             --target ${{ matrix.image }} \
             --file Containerfile \
@@ -166,6 +175,7 @@ jobs:
             --build-arg LTS_VERSION=${{ env.LTS_VERSION }} \
             --build-arg IMAGE_VERSION=${{ needs.prepare.outputs.date_tag }} \
             --tag raw-img .
+          rm -f secureboot.key
 
       - name: Run integration tests
         run: just test localhost/raw-img:latest

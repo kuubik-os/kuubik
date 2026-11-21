@@ -16,6 +16,12 @@ dnf -y install akmods nvtop
 # install it without scriptlets before the driver stack pulls it in normally
 dnf -y install --setopt=tsflags=noscripts akmod-nvidia
 dnf -y install nvidia-driver nvidia-driver-cuda nvidia-settings libnvidia-fbc
+# akmods signs the kmod with the key pair in /etc/pki/akmods, use the kuubik secure boot key when the build has it
+SB_KEY=/run/secrets/secureboot_key
+if [ -s "$SB_KEY" ]; then
+	install -D -m 0640 -g akmods "$SB_KEY" /etc/pki/akmods/private/private_key.priv
+	install -D -m 0644 /usr/share/kuubik/secureboot/kuubik.der /etc/pki/akmods/certs/public_key.der
+fi
 akmods --force --kernels "${KERNEL_VERSION}" --kmod nvidia
 
 # akmods exits 0 even when the build fails
@@ -23,6 +29,15 @@ if ! find "/usr/lib/modules/${KERNEL_VERSION}" -iname 'nvidia.ko*' -print -quit 
 	echo "ERROR: nvidia kmod build failed for kernel ${KERNEL_VERSION}" >&2
 	find /var/cache/akmods -iname '*.log' -exec sh -c 'echo "=== $1 ==="; cat "$1"' _ {} \; >&2
 	exit 1
+fi
+
+if [ -s "$SB_KEY" ]; then
+	rm -f /etc/pki/akmods/private/private_key.priv
+	signer=$(modinfo -F signer "$(find "/usr/lib/modules/${KERNEL_VERSION}" -iname 'nvidia.ko*' -print -quit)")
+	if [ "$signer" != "kuubik secure boot" ]; then
+		echo "ERROR: nvidia kmod not signed with the kuubik secure boot key (signer: '${signer}')" >&2
+		exit 1
+	fi
 fi
 
 dnf config-manager --add-repo https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo
