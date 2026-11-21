@@ -134,7 +134,8 @@ cmd_enroll_secure_boot_key() {
 # tapped here, not at first boot, which may be offline. brew refuses to run as root
 if [ -x "$BREW" ] && [ ! -d "$UBLUE_TAP_DIR" ] && [ "$EUID" -ne 0 ]; then
 	echo "==> Adding the ublue-os homebrew tap..." >&2
-	"$BREW" tap ublue-os/tap >&2 || echo "kctl: brew tap failed, retrying on next run" >&2
+	# brew 6+ won't load non-official taps by short name until trusted
+	{ "$BREW" tap ublue-os/tap && "$BREW" trust ublue-os/tap; } >&2 || echo "kctl: brew tap failed, retrying on next run" >&2
 fi
 
 case "${1:-help}" in
