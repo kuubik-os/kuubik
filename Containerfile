@@ -36,6 +36,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/var \
     --mount=type=tmpfs,dst=/tmp \
+    --mount=type=secret,id=secureboot_key \
     /ctx/shared/90-finalize.sh
 RUN bootc container lint
 
@@ -44,6 +45,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/var \
     --mount=type=tmpfs,dst=/tmp \
+    --mount=type=secret,id=secureboot_key \
     /ctx/fedora/60-nvidia.sh
 # after the driver install, nvidia packages ship their own 99-nvidia.conf
 COPY system_files/nvidia /
@@ -53,6 +55,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/var \
     --mount=type=tmpfs,dst=/tmp \
+    --mount=type=secret,id=secureboot_key \
     /ctx/shared/90-finalize.sh
 RUN bootc container lint
 
@@ -76,6 +79,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/var \
     --mount=type=tmpfs,dst=/tmp \
+    --mount=type=secret,id=secureboot_key \
     /ctx/shared/90-finalize.sh
 RUN bootc container lint
 
@@ -84,6 +88,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/var \
     --mount=type=tmpfs,dst=/tmp \
+    --mount=type=secret,id=secureboot_key \
     /ctx/rhel/60-nvidia.sh
 # after the driver install, nvidia packages ship their own 99-nvidia.conf
 COPY system_files/nvidia /
@@ -93,5 +98,6 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/var \
     --mount=type=tmpfs,dst=/tmp \
+    --mount=type=secret,id=secureboot_key \
     /ctx/shared/90-finalize.sh
 RUN bootc container lint

@@ -22,6 +22,7 @@ build target=image_name tag="latest":
         --pull=newer \
         --build-arg FEDORA_VERSION={{ fedora_version }} \
         --label org.opencontainers.image.version=$(date -u +%Y%m%d).0 \
+        $(test -f secureboot.key && echo --secret id=secureboot_key,src=secureboot.key) \
         --target {{ target }} \
         --tag {{ target }}:{{ tag }} \
         .

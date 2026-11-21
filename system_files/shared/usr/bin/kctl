@@ -12,6 +12,7 @@ Usage:
   kctl upgrade                 Pull and apply the latest system image, then
                                 update flatpaks and homebrew
   kctl disable-update-notify   Turn off the "system is out of date" notification
+  kctl enroll-secure-boot-key  Queue the kuubik secure boot key for enrollment
   kctl help                    Show this help
 EOF
 }
@@ -49,9 +50,16 @@ cmd_disable_update_notify() {
 	echo "  systemctl --user unmask kctl-update-notify.timer"
 }
 
+cmd_enroll_secure_boot_key() {
+	echo "Choose a one-time password. On the next boot pick \"Enroll MOK\" in the blue"
+	echo "MokManager screen and enter it, then secure boot can be enabled."
+	sudo mokutil --import /usr/share/kuubik/secureboot/kuubik.der
+}
+
 case "${1:-help}" in
 upgrade) cmd_upgrade ;;
 disable-update-notify) cmd_disable_update_notify ;;
+enroll-secure-boot-key) cmd_enroll_secure_boot_key ;;
 help | --help | -h) usage ;;
 *)
 	echo "kctl: unknown command '${1:-}'" >&2
