@@ -37,6 +37,7 @@ ostreecontainer --url=${INSTALL_IMAGE_PAYLOAD} --transport=containers-storage --
 %include /usr/share/anaconda/post-scripts/switch-to-signed.ks
 %include /usr/share/anaconda/post-scripts/restore-selinux-labels.ks
 %include /usr/share/anaconda/post-scripts/zsh-default-shell.ks
+%include /usr/share/anaconda/post-scripts/secureboot-enroll-key.ks
 KSEOF
 
 # point installed system at signed registry image for updates
