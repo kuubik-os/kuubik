@@ -83,8 +83,17 @@ jobs:
             --workdir /work \
             "registry.fedoraproject.org/fedora:${FEDORA_VERSION}" \
             bash -euo pipefail -c '
-              dnf -y install lorax pykickstart xorriso mtools isomd5sum
+              dnf -y install lorax pykickstart xorriso mtools isomd5sum cpio
               ksvalidator kuubik.ks
+              # anaconda hardcodes a 2 GiB /boot for automatic partitioning, bump it to 5 GiB with an
+              # updates image. the "fedora" repo is the frozen release, so it matches the iso anaconda
+              dnf download --repo=fedora --destdir=anaconda anaconda-core
+              mkdir -p updates
+              rpm2cpio anaconda/anaconda-core-*.rpm | (cd updates && cpio -idm --quiet "*/pyanaconda/modules/storage/platform.py")
+              platform="$(find updates -name platform.py)"
+              sed -i "s/Size(\"2GiB\")/Size(\"5GiB\")/" "${platform}"
+              grep -q "Size(\"5GiB\")" "${platform}"
+              (cd updates && find . | cpio -o -H newc --quiet | gzip) >updates.img
               mkdir -p grub
               xorriso -osirrox on -indev netinst.iso \
                 -extract /EFI/BOOT/grub.cfg grub/efi.cfg \
@@ -95,7 +104,7 @@ jobs:
               xorriso -indev netinst.iso -outdev menu.iso -boot_image any replay \
                 -update grub/efi.cfg /EFI/BOOT/grub.cfg \
                 -update grub/bios.cfg /boot/grub2/grub.cfg
-              mkksiso --ks kuubik.ks menu.iso upload/kuubik-netinstall-amd64.iso
+              mkksiso --ks kuubik.ks --updates updates.img menu.iso upload/kuubik-netinstall-amd64.iso
             '
           sudo chown -R "$(id -u):$(id -g)" upload
           cd upload && sha256sum ./*.iso | tee kuubik-netinstall-amd64.iso-CHECKSUM

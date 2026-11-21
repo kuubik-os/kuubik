@@ -39,3 +39,6 @@ if systemctl --global list-unit-files flatpak-user-update.timer &>/dev/null; the
 fi
 
 systemctl --global enable kctl-update-notify.timer
+
+# keeps the first booted image for kctl rollback, see kuubik-factory-image
+systemctl enable kuubik-factory-image.service
