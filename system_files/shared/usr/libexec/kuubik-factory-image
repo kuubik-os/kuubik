@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+# keep the first booted image as a plain ostree ref instead of a pinned deployment:
+# it survives deployment cleanup like a pin, but gets no boot menu entry and no /boot space.
+# kctl rollback lists it as the factory image
+
+set -euo pipefail
+
+REF=kuubik/factory
+
+commit="$(rpm-ostree status --json | jq -r '.deployments[] | select(.booted) | .checksum')"
+[ -n "$commit" ]
+
+# /sysroot is mounted read-only, make it writable only inside a private mount namespace
+# shellcheck disable=SC2016 # $1 and $2 expand in the inner sh
+unshare -m sh -c 'mount -o remount,rw /sysroot && ostree refs --repo=/sysroot/ostree/repo --create="$1" "$2"' \
+	sh "$REF" "$commit"

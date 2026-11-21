@@ -1,0 +1,10 @@
+[Unit]
+Description=Keep the first booted image as the factory image
+ConditionPathExists=!/sysroot/ostree/repo/refs/heads/kuubik/factory
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/kuubik-factory-image
+
+[Install]
+WantedBy=multi-user.target
