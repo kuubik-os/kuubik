@@ -1,16 +1,11 @@
 [Desktop Entry]
-DefaultProfile=Profile 1.profile
+DefaultProfile=kuubik.profile
 
 [General]
 ConfigVersion=1
 
 [KonsoleWindow]
 ForceNewTabs=true
-
-[LightDarkTheme]
-DarkThemeProfile=Dark
-LightThemeProfile=Light
-SyncProfileWithSystemTheme=true
 
 [MainWindow]
 MenuBar=Disabled

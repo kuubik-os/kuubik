@@ -1,0 +1,6 @@
+# replaces the iso's /.buildstamp in the installer root, anaconda takes the product name from it.
+# version is shown after the name ("welcome to kuubik linux")
+[Main]
+Product=kuubik
+Version=Linux
+IsFinal=True

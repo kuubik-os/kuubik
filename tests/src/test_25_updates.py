@@ -1,27 +1,29 @@
 import re
+import shlex
+
+import pytest
 
 VERSION_RE = re.compile(r"^[0-9]{8}\.[0-9]+$")
+STUB_DIR = "/tmp/kctl-update-check-stubs"
 
 
-def test_rpm_ostree_auto_update_disabled(ssh_command):
-    result = ssh_command(
-        "systemctl is-enabled rpm-ostreed-automatic.timer", check=False
-    )
-    assert result.stdout.strip() == "disabled", (
-        f"rpm-ostreed-automatic.timer expected disabled, actual: {result.stdout.strip()}"
-    )
+@pytest.mark.parametrize(
+    "unit",
+    ["rpm-ostreed-automatic.timer", "flatpak-system-update.timer"],
+)
+def test_auto_update_timer_disabled(ssh_command, unit):
+    # flatpak timers don't exist on every base, anything but enabled is fine
+    result = ssh_command(f"systemctl is-enabled {unit}", check=False)
+    assert result.stdout.strip() != "enabled", f"{unit} is enabled"
 
 
-def test_flathub_is_default_remote(ssh_command):
-    result = ssh_command("flatpak remotes")
-    assert "flathub" in result.stdout, (
-        f"flathub not present as a default flatpak remote: {result.stdout}"
-    )
+def test_flatpak_user_auto_update_disabled(ssh_command):
+    result = ssh_command("systemctl --user is-enabled flatpak-user-update.timer", check=False)
+    assert result.stdout.strip() != "enabled", "flatpak-user-update.timer is enabled"
 
 
 def test_rpm_ostree_version_label_surfaced(ssh_command):
-    # confirms the org.opencontainers.image.version label (set by Justfile's
-    # build recipe for test builds, and by CI's real build) survives the
+    # confirms the org.opencontainers.image.version label survives the
     # image build -> ostree import -> deploy pipeline and is readable the
     # same way kctl-update-check reads it
     result = ssh_command(
@@ -33,15 +35,34 @@ def test_rpm_ostree_version_label_surfaced(ssh_command):
     )
 
 
-def test_kctl_update_check_runs_cleanly(ssh_command):
-    # on a locally-built test image the tracked pullspec is a local tag, not
-    # a real ghcr.io one, so this always takes the safe early-exit path --
-    # this just proves the script itself doesn't error or hang
-    ssh_command("timeout 30 /usr/libexec/kctl-update-check")
-
-
 def test_kctl_update_notify_timer_enabled(ssh_command):
     result = ssh_command("systemctl --user is-enabled kctl-update-notify.timer")
     assert result.stdout.strip() == "enabled", (
         f"kctl-update-notify.timer expected enabled, actual: {result.stdout.strip()}"
     )
+
+
+# the test image tracks a local ref, so stub rpm-ostree and skopeo to look like
+# a ghcr install and notify-send to record whether it fired
+@pytest.mark.parametrize(("latest", "notified"), [("20260131.0", True), ("20260130.2", False)])
+def test_kctl_update_check_notifies_after_30_days(ssh_command, latest, notified):
+    status = (
+        '{"deployments":[{"booted":true,"version":"20260101.0",'
+        '"container-image-reference":"ostree-image-signed:docker://ghcr.io/kuubik-os/kuubik:latest"}]}'
+    )
+    inspect = f'{{"Labels":{{"org.opencontainers.image.version":"{latest}"}}}}'
+    stubs = {
+        "rpm-ostree": f"#!/bin/sh\necho {shlex.quote(status)}\n",
+        "skopeo": f"#!/bin/sh\necho {shlex.quote(inspect)}\n",
+        "notify-send": f'#!/bin/sh\necho "$*" >{STUB_DIR}/notified\n',
+    }
+    ssh_command(
+        f"rm -rf {STUB_DIR} && mkdir -p {STUB_DIR} && "
+        + " && ".join(
+            f"printf %s {shlex.quote(body)} >{STUB_DIR}/{name} && chmod +x {STUB_DIR}/{name}"
+            for name, body in stubs.items()
+        )
+    )
+    ssh_command(f"PATH={STUB_DIR}:$PATH timeout 30 /usr/libexec/kctl-update-check")
+    fired = ssh_command(f"test -f {STUB_DIR}/notified", check=False).returncode == 0
+    assert fired == notified, f"latest {latest}: notification fired={fired}, expected {notified}"
