@@ -6,9 +6,7 @@ import pytest
 from defaults import SESSION_ENV, TEST_USER
 
 
-@pytest.fixture(autouse=True)
-def _session(desktop_session):
-    pass
+pytestmark = pytest.mark.usefixtures("desktop_session")
 
 
 def test_graphical_session_is_user_plasma(ssh_command):

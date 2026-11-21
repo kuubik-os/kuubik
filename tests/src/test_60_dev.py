@@ -2,7 +2,6 @@ import pytest
 
 from defaults import TEST_USER
 
-KUUBIK_REPOS = ["kuubik", "kuubik-nvidia", "kuubik-lts", "kuubik-lts-nvidia"]
 DISTROBOX = "kuubik-test-box"
 
 
@@ -13,11 +12,9 @@ def test_git(ssh_command):
 def test_container_policy_requires_kuubik_signatures(ssh_command):
     policy = "/etc/containers/policy.json"
     assert ssh_command(f"jq -r '.default[0].type' {policy}").stdout.strip() == "reject"
-    for repo in KUUBIK_REPOS:
-        result = ssh_command(
-            f"jq -r '.transports.docker[\"ghcr.io/kuubik-os/{repo}\"][0].type' {policy}"
-        )
-        assert result.stdout.strip() == "sigstoreSigned", f"{repo} is not signature checked"
+    # one namespace rule covers every kuubik-os image
+    result = ssh_command(f"jq -r '.transports.docker[\"ghcr.io/kuubik-os\"][0].type' {policy}")
+    assert result.stdout.strip() == "sigstoreSigned", "ghcr.io/kuubik-os is not signature checked"
 
 
 def test_rootless_podman_runs_unsigned_image(ssh_command):

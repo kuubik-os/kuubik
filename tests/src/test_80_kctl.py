@@ -2,12 +2,6 @@ FACTORY_REF = "kuubik/factory"
 REPO = "/sysroot/ostree/repo"
 
 
-def _booted_checksum(ssh_command) -> str:
-    return ssh_command(
-        "rpm-ostree status --json | jq -r '.deployments[] | select(.booted) | .checksum'"
-    ).stdout.strip()
-
-
 def test_kctl_help_and_unknown_command(ssh_command):
     ssh_command("kctl help")
     result = ssh_command("kctl no-such-command", check=False)
@@ -22,7 +16,10 @@ def test_kctl_upgrade_can_be_declined(ssh_command):
 def test_factory_ref_is_first_booted_image(ssh_command, wait_for):
     wait_for(f"test -e {REPO}/refs/heads/{FACTORY_REF}", timeout=120)
     factory = ssh_command(f"ostree rev-parse --repo={REPO} {FACTORY_REF}").stdout.strip()
-    assert factory == _booted_checksum(ssh_command)
+    booted = ssh_command(
+        "rpm-ostree status --json | jq -r '.deployments[] | select(.booted) | .checksum'"
+    ).stdout.strip()
+    assert factory == booted
     result = ssh_command("systemctl show -p Result --value kuubik-factory-image.service")
     assert result.stdout.strip() == "success", f"factory service result: {result.stdout}"
 

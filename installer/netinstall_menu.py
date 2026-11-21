@@ -2,6 +2,7 @@
 
 import re
 import sys
+from pathlib import Path
 
 FLAVORS = [
     ("kuubik", "kuubik"),
@@ -29,11 +30,8 @@ def edit(cfg: str) -> str:
 
 def main() -> None:
     """Edit every grub config passed on the command line in place."""
-    for path in sys.argv[1:]:
-        with open(path) as f:
-            cfg = f.read()
-        with open(path, "w") as f:
-            f.write(edit(cfg))
+    for path in map(Path, sys.argv[1:]):
+        path.write_text(edit(path.read_text()))
 
 
 if __name__ == "__main__":

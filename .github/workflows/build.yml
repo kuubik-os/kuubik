@@ -75,9 +75,10 @@ jobs:
           now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           day="${now%%T*}"
 
-          # build number for the day: successful non-PR runs of this workflow today + 1
+          # build number for the day: earlier non-PR runs of this workflow today + 1. failed and cancelled
+          # runs count too, they may have pushed some flavors, so a number is never reused
           seq="$(gh api "repos/${{ github.repository }}/actions/workflows/build.yml/runs?per_page=100&created=${day}" \
-            --jq '[.workflow_runs[] | select(.event != "pull_request" and .conclusion == "success")] | length + 1')"
+            --jq '[.workflow_runs[] | select(.event != "pull_request" and .id < ${{ github.run_id }})] | length + 1')"
 
           echo "date=${now}" >> "$GITHUB_OUTPUT"
           echo "date_tag=${day//-/}.${seq}" >> "$GITHUB_OUTPUT"
@@ -273,10 +274,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push To GHCR
+      # only the date tag goes up before signing, so a job stopped midway never leaves an unsigned latest.
+      # the signature is per digest and covers every tag pushed after it
+      - name: Push date tag to GHCR
         if: env.PUBLISH == 'true'
-        run: |
-          for tag in ${{ steps.metadata.outputs.tags }}; do
+        run: &push |
+          for tag in ${TAGS}; do
             for attempt in 1 2 3 4 5; do
               podman push "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:$tag" && break
               [ "$attempt" -lt 5 ] || exit 1
@@ -284,6 +287,8 @@ jobs:
               sleep 10
             done
           done
+        env:
+          TAGS: ${{ needs.prepare.outputs.date_tag }}
 
       - name: Install Cosign
         if: env.PUBLISH == 'true'
@@ -293,13 +298,16 @@ jobs:
 
       - name: Sign container image
         if: env.PUBLISH == 'true'
-        run: |
-          for tag in ${{ steps.metadata.outputs.tags }}; do
-            cosign sign -y --key env://COSIGN_PRIVATE_KEY "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:$tag"
-          done
+        run: cosign sign -y --key env://COSIGN_PRIVATE_KEY "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:${{ needs.prepare.outputs.date_tag }}"
         env:
           COSIGN_EXPERIMENTAL: false
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+
+      - name: Push remaining tags to GHCR
+        if: env.PUBLISH == 'true'
+        run: *push
+        env:
+          TAGS: ${{ steps.metadata.outputs.tags }}
 
   release:
     name: Create GitHub release
