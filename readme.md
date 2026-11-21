@@ -6,7 +6,7 @@ list of changes: https://kuubik-os.github.io/
 ## images
 - `kuubik`: fedora kinoite based
 - `kuubik-nvidia`: `kuubik` with nvidia driver
-- `kuubik-lts`: rhel/alma 10 based
+- `kuubik-lts`: rhel/alma based
 - `kuubik-lts-nvidia`: `kuubik-lts` with nvidia driver
 
 ## install
@@ -14,7 +14,7 @@ list of changes: https://kuubik-os.github.io/
 download the [netinstall ISO](https://github.com/kuubik-os/kuubik/releases/download/netinstall/kuubik-netinstall-amd64.iso), boot it and pick the image in the boot menu. it installs that image over the network, so it needs internet. works with secure boot on, see [secure boot](#secure-boot).
 
 ### rebase
-from an existing fedora kinoite install, switch to the unsigned image first (replace `kuubik` with the image you want):
+from an existing fedora kinoite install (almalinux atomic desktop kde for lts images), switch to the unsigned image first (replace `kuubik` with the image you want):
 
 ```bash
 rpm-ostree rebase ostree-unverified-registry:ghcr.io/kuubik-os/kuubik
