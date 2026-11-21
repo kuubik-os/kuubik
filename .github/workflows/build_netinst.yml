@@ -9,6 +9,7 @@ on:
     paths: &paths
       - ".github/workflows/build_netinst.yml"
       - "installer/netinstall.ks"
+      - "installer/netinstall_menu.py"
       - "installer/system_files/usr/share/anaconda/post-scripts/**"
 
   push:
@@ -35,16 +36,7 @@ concurrency:
 jobs:
 
   build_netinst:
-    name: Build netinstall ISO (${{ matrix.image }})
-
-    strategy:
-      fail-fast: false
-      matrix:
-        image:
-          - kuubik
-          - kuubik-nvidia
-          - kuubik-lts
-          - kuubik-lts-nvidia
+    name: Build netinstall ISO
 
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -77,14 +69,15 @@ jobs:
 
       - name: Write kickstart
         run: |
-          sed "s|@IMAGE@|${IMAGE_REGISTRY}/${{ matrix.image }}:latest|g" installer/netinstall.ks >kuubik.ks
+          sed "s|@REGISTRY@|${IMAGE_REGISTRY}|g" installer/netinstall.ks >kuubik.ks
           cat installer/system_files/usr/share/anaconda/post-scripts/*.ks >>kuubik.ks
           cat kuubik.ks
 
       - name: Build ISO
         run: |
           mkdir -p upload
-          # mkksiso rebuilds efiboot.img through a loop device
+          # mkksiso rebuilds efiboot.img through a loop device. the flavor menu goes into the iso first,
+          # mkksiso then adds inst.ks to every entry and rebuilds efiboot.img from the edited EFI/BOOT/grub.cfg
           sudo podman run --rm --privileged \
             --volume "${PWD}:/work:Z" \
             --workdir /work \
@@ -92,10 +85,20 @@ jobs:
             bash -euo pipefail -c '
               dnf -y install lorax pykickstart xorriso mtools isomd5sum
               ksvalidator kuubik.ks
-              mkksiso --ks kuubik.ks netinst.iso "upload/${0}-netinstall-amd64.iso"
-            ' "${{ matrix.image }}"
+              mkdir -p grub
+              xorriso -osirrox on -indev netinst.iso \
+                -extract /EFI/BOOT/grub.cfg grub/efi.cfg \
+                -extract /boot/grub2/grub.cfg grub/bios.cfg
+              chmod u+w grub/*.cfg
+              python3 installer/netinstall_menu.py grub/efi.cfg grub/bios.cfg
+              cat grub/efi.cfg
+              xorriso -indev netinst.iso -outdev menu.iso -boot_image any replay \
+                -update grub/efi.cfg /EFI/BOOT/grub.cfg \
+                -update grub/bios.cfg /boot/grub2/grub.cfg
+              mkksiso --ks kuubik.ks menu.iso upload/kuubik-netinstall-amd64.iso
+            '
           sudo chown -R "$(id -u):$(id -g)" upload
-          cd upload && sha256sum ./*.iso | tee "${{ matrix.image }}-netinstall-amd64.iso-CHECKSUM"
+          cd upload && sha256sum ./*.iso | tee kuubik-netinstall-amd64.iso-CHECKSUM
 
       - name: Install Cosign
         if: github.event_name != 'pull_request'
@@ -115,7 +118,7 @@ jobs:
       - name: Upload ISO
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ matrix.image }}-netinstall-amd64
+          name: kuubik-netinstall-amd64
           path: upload/
           if-no-files-found: error
           retention-days: 90

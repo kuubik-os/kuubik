@@ -16,7 +16,7 @@ rpm-ostree rebase ostree-image-signed:docker://ghcr.io/kuubik-os/kuubik
 ```
 
 ## secure boot
-kernel and nvidia driver are signed with the kuubik key. on secure boot devices install with the netinstall ISO (artifacts of the "Build network install ISO" workflow). it boots with secure boot on, installs the image over the network and queues the key: on first reboot pick "Enroll MOK" and enter password `kuubik`.
+kernel and nvidia driver are signed with the kuubik key. on secure boot devices install with the netinstall ISO (artifacts of the "Build network install ISO" workflow). it boots with secure boot on, you pick the flavor in its boot menu, it installs that image over the network and queues the key: on first reboot pick "Enroll MOK" and enter password `kuubik`.
 
 on an existing install, run `kctl enroll-secure-boot-key`, reboot, enroll, then enable secure boot.
 
