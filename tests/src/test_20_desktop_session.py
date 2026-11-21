@@ -30,7 +30,12 @@ def test_desktop_process_running(ssh_command, wait_for, process):
             "/org/freedesktop/portal/desktop org.freedesktop.DBus.Peer Ping",
             check=False,
         )
-    wait_for(f"pgrep -u {TEST_USER} -x {process}", timeout=60)
+    # comm is cut at 15 chars and older procps (alma) rejects longer -x names
+    if len(process) > 15:
+        match = f"-f '^([^ ]*/)?{process}( |$)'"
+    else:
+        match = f"-x {process}"
+    wait_for(f"pgrep -u {TEST_USER} {match}", timeout=60)
 
 
 def test_notification_delivered(ssh_command):
@@ -102,8 +107,17 @@ def test_no_failed_system_units(
     assert failed == [], f"unexpected failed system units: {result.stdout}\n{details}"
 
 
-def test_no_failed_user_units(ssh_command):
-    result = ssh_command("systemctl --user --failed --no-legend")
-    assert result.stdout.strip() == "", (
-        f"unexpected failed user units: {result.stdout}"
-    )
+# nvidia-settings --load-config-only fails without GPU
+NO_GPU_EXPECTED_FAILED_USER_UNITS = (r"app-nvidia\x2dsettings\x2dload@autostart.service",)
+
+
+def test_no_failed_user_units(
+    ssh_command: Callable[..., subprocess.CompletedProcess[str]],
+) -> None:
+    result = ssh_command("systemctl --user --failed --no-legend --plain")
+    failed = [
+        line
+        for line in result.stdout.splitlines()
+        if line.strip() and line.split()[0] not in NO_GPU_EXPECTED_FAILED_USER_UNITS
+    ]
+    assert failed == [], f"unexpected failed user units: {result.stdout}"
