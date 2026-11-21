@@ -84,7 +84,8 @@ jobs:
       - name: Build ISO
         run: |
           mkdir -p upload
-          podman run --rm \
+          # mkksiso rebuilds efiboot.img through a loop device
+          sudo podman run --rm --privileged \
             --volume "${PWD}:/work:Z" \
             --workdir /work \
             "registry.fedoraproject.org/fedora:${FEDORA_VERSION}" \
@@ -93,6 +94,7 @@ jobs:
               ksvalidator kuubik.ks
               mkksiso --ks kuubik.ks netinst.iso "upload/${0}-netinstall-amd64.iso"
             ' "${{ matrix.image }}"
+          sudo chown -R "$(id -u):$(id -g)" upload
           cd upload && sha256sum ./*.iso | tee "${{ matrix.image }}-netinstall-amd64.iso-CHECKSUM"
 
       - name: Install Cosign
