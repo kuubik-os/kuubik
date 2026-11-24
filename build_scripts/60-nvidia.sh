@@ -67,3 +67,4 @@ dnf5 -y install --from-repo=nvidia-container-toolkit nvidia-container-toolkit nv
 
 dnf5 -y remove akmods akmod-nvidia
 rm -fv /etc/yum.repos.d/nvidia-container-toolkit.repo /etc/yum.repos.d/fedora-nvidia.repo
+rm -fv /usr/share/applications/nvtop.desktop
