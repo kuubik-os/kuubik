@@ -1,0 +1,1 @@
+../../../org.kde.breeze.desktop/contents/plasmoidsetupscripts/org.kde.plasma.icontasks.js
