@@ -17,7 +17,6 @@ COPY --from=brew /system_files/usr/share/fish/vendor_conf.d/ublue-brew.fish /usr
 
 FROM quay.io/fedora-ostree-desktops/kinoite:${FEDORA_VERSION} AS base
 COPY --from=overrides / /
-COPY system_files/fedora /
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/var \
