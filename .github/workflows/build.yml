@@ -120,6 +120,11 @@ jobs:
             df -h /
           fi
 
+      # with redirect_dir on, containers/storage falls back to naive diff and every image commit
+      # walks the whole tree (~3 min each). must run before the first podman/buildah call
+      - name: Enable overlay native diff
+        run: echo N | sudo tee /sys/module/overlay/parameters/redirect_dir
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
 
