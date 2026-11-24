@@ -39,7 +39,7 @@ jobs:
 
   check_formatting:
     name: Check BASH
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
 
     steps:
@@ -54,7 +54,7 @@ jobs:
   prepare:
     name: Compute build metadata
     needs: check_formatting
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
 
     permissions:
@@ -97,7 +97,7 @@ jobs:
             image: kuubik-nvidia
             tag: nvidia
 
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
 
     permissions:
@@ -309,7 +309,7 @@ jobs:
     name: Create GitHub release
     needs: [prepare, build_image]
     if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     permissions:
