@@ -22,19 +22,6 @@ for plugin in "${zsh_plugins[@]}"; do
 	fi
 done
 
-# drop base distro branding. os-release logo and links show in system settings > about,
-# ID and NAME stay since tools match on them
-sed -i -E '/^(LOGO|HOME_URL|DOCUMENTATION_URL|SUPPORT_URL|BUG_REPORT_URL|VENDOR_NAME|VENDOR_URL|DEFAULT_HOSTNAME)=/d' /usr/lib/os-release
-# kde-settings points the about page at the distro logo
-rm -fv /etc/xdg/kcm-about-distrorc
-# boot splash logo, plymouth skips a missing watermark. initramfs is rebuilt in 90-finalize.sh
-rm -fv /usr/share/plymouth/themes/spinner/watermark.png /usr/share/plymouth/themes/charge/watermark.png
-# plasma's own default wallpaper. fedora's look-and-feel, its Image=Fedora links to Default
-ln -sfn Next /usr/share/wallpapers/Default
-rm -rf /usr/share/wallpapers/F[0-9]* \
-	/usr/share/backgrounds/f[0-9]* /usr/share/backgrounds/fedora-* \
-	/usr/share/backgrounds/default* /usr/share/backgrounds/desktop-backgrounds-default.xml
-
 systemctl enable brew-setup.service
 echo 'HOMEBREW_NO_AUTO_UPDATE=1' >>/etc/environment
 
