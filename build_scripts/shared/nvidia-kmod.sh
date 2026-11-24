@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# builds and signs the nvidia kmod, called by {fedora,rhel}/60-nvidia.sh after the driver install
+# builds and signs the nvidia kmod, called by fedora/60-nvidia.sh after the driver install
 
 set -ouex pipefail
 
@@ -27,7 +27,7 @@ if ! find "/usr/lib/modules/${KERNEL_VERSION}" -iname 'nvidia.ko*' -print -quit 
 fi
 
 if [ -s "$SB_KEY" ]; then
-	# akmods signs with the key above on fedora but not on el, sign whatever it left unsigned
+	# sign whatever akmods left unsigned
 	sign_file="/usr/src/kernels/${KERNEL_VERSION}/scripts/sign-file"
 	while read -r mod; do
 		if [ -z "$(modinfo -F signer "$mod")" ]; then

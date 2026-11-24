@@ -9,8 +9,8 @@ def test_full_ffmpeg_installed(ssh_command):
     assert result.returncode != 0, "ffmpeg-free is installed instead of the full ffmpeg"
 
 
-def test_hw_video_drivers_installed(ssh_command, is_lts):
-    packages = ["intel-media-driver"] + ([] if is_lts else FEDORA_FREEWORLD)
+def test_hw_video_drivers_installed(ssh_command):
+    packages = ["intel-media-driver"] + FEDORA_FREEWORLD
     ssh_command(f"rpm -q {' '.join(packages)}")
 
 

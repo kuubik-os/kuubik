@@ -1,5 +1,4 @@
 ARG FEDORA_VERSION=44
-ARG LTS_VERSION=10
 
 FROM scratch AS ctx
 COPY build_scripts /
@@ -59,45 +58,3 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     /ctx/shared/90-finalize.sh
 RUN bootc container lint
 
-FROM quay.io/almalinuxorg/atomic-desktop-kde:${LTS_VERSION} AS lts-base
-COPY --from=overrides / /
-COPY system_files/rhel /
-RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
-    --mount=type=cache,dst=/var/cache \
-    --mount=type=tmpfs,dst=/var \
-    --mount=type=tmpfs,dst=/tmp \
-    /ctx/rhel/10-kernel.sh && \
-    /ctx/rhel/20-multimedia.sh && \
-    /ctx/rhel/30-debloat.sh && \
-    /ctx/rhel/40-packages.sh && \
-    /ctx/shared/50-system-config.sh
-
-FROM lts-base AS kuubik-lts
-ARG IMAGE_VERSION=""
-LABEL org.opencontainers.image.version=${IMAGE_VERSION}
-RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
-    --mount=type=cache,dst=/var/cache \
-    --mount=type=tmpfs,dst=/var \
-    --mount=type=tmpfs,dst=/tmp \
-    --mount=type=secret,id=secureboot_key \
-    /ctx/shared/90-finalize.sh
-RUN bootc container lint
-
-FROM lts-base AS kuubik-lts-nvidia
-RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
-    --mount=type=cache,dst=/var/cache \
-    --mount=type=tmpfs,dst=/var \
-    --mount=type=tmpfs,dst=/tmp \
-    --mount=type=secret,id=secureboot_key \
-    /ctx/rhel/60-nvidia.sh
-# after the driver install, nvidia packages ship their own 99-nvidia.conf
-COPY system_files/nvidia /
-ARG IMAGE_VERSION=""
-LABEL org.opencontainers.image.version=${IMAGE_VERSION}
-RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
-    --mount=type=cache,dst=/var/cache \
-    --mount=type=tmpfs,dst=/var \
-    --mount=type=tmpfs,dst=/tmp \
-    --mount=type=secret,id=secureboot_key \
-    /ctx/shared/90-finalize.sh
-RUN bootc container lint

@@ -7,5 +7,5 @@ Covers: kernel, nvidia driver stack, secure boot signing, desktop session and au
 `test_90_rollback.py` reboots the VM twice and runs last.
 
 ```bash
-just test-vm [nvidia|lts|lts-nvidia]
+just test-vm [nvidia]
 ```

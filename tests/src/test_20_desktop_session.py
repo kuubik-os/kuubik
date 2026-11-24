@@ -28,7 +28,7 @@ def test_desktop_process_running(ssh_command, wait_for, process):
             "/org/freedesktop/portal/desktop org.freedesktop.DBus.Peer Ping",
             check=False,
         )
-    # comm is cut at 15 chars and older procps (alma) rejects longer -x names
+    # comm is cut at 15 chars and older procps rejects longer -x names
     if len(process) > 15:
         match = f"-f '^([^ ]*/)?{process}( |$)'"
     else:

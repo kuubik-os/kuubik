@@ -6,7 +6,6 @@ APP = "org.kde.okular"
 
 
 def test_flatpak_usable_without_root(ssh_command):
-    # on el non-root flatpak fails until kuubik-flatpak-init.service creates the repo
     result = ssh_command("flatpak remotes --columns=name")
     assert "flathub" in result.stdout.split(), f"flathub remote missing: {result.stdout}"
     ssh_command("flatpak list")
