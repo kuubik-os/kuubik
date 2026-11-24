@@ -1,0 +1,7 @@
+# overrides fedora's look-and-feel from kde-settings, /etc/xdg comes first in XDG_CONFIG_DIRS.
+# "Automatic": breeze light by day, breeze dark at night
+[KDE]
+LookAndFeelPackage=org.kde.breeze.desktop
+AutomaticLookAndFeel=true
+DefaultLightLookAndFeel=org.kde.breeze.desktop
+DefaultDarkLookAndFeel=org.kde.breezedark.desktop
