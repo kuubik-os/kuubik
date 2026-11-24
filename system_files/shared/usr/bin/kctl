@@ -14,6 +14,8 @@ Usage:
   kctl upgrade                 Pull and apply the latest system image, then
                                 update flatpaks and homebrew
   kctl rollback                Pick a system image to boot from now on
+  kctl overrides               List local changes on top of the system image:
+                                packages, /etc files, unlocked /usr, initramfs
   kctl disable-update-notify   Turn off the "system is out of date" notification
   kctl enroll-secure-boot-key  Queue the kuubik secure boot key for enrollment
   kctl help                    Show this help
@@ -119,6 +121,52 @@ cmd_rollback() {
 	echo "Done. Reboot to start $version."
 }
 
+cmd_overrides() {
+	local status_json etc_diff kind item
+	local -a lines=()
+	status_json="$(rpm-ostree status --json --booted)" || return 1
+	# /etc is compared to the image's default copy in /usr/etc, needs root
+	etc_diff="$(sudo ostree admin config-diff)" || return 1
+
+	while IFS=$'\t' read -r kind item; do
+		lines+=("$(printf '  %-10s %s' "$kind" "$item")")
+	done < <(jq -r '.deployments[0] |
+		(.["requested-packages"][]?, .["requested-local-packages"][]? | ["layered", .]),
+		(.["requested-base-removals"][]? | ["removed", .]),
+		(.["requested-base-local-replacements"][]?, (.["base-remote-replacements"] // {} | .[][]?) | ["replaced", .]),
+		(.["requested-local-fileoverride-packages"][]? | ["overrides", .]),
+		(select((.unlocked // "none") != "none") | ["unlocked", "/usr (\(.unlocked))"]),
+		(select(.["regenerate-initramfs"]) | ["initramfs", "regenerated locally \(.["initramfs-args"] // [] | join(" "))"]),
+		(.["initramfs-etc"][]? | ["initramfs", "includes \(.)"]) | @tsv' <<<"$status_json")
+
+	while read -r kind item; do
+		# differ on every install: written by the installer, first boot or account and network setup
+		case "$item" in
+		passwd | passwd- | group | group- | shadow | shadow- | gshadow | gshadow- | \
+			subuid | subuid- | subgid | subgid- | .pwd.lock | machine-id | hostname | \
+			localtime | adjtime | locale.conf | vconsole.conf | fstab | crypttab | resolv.conf | \
+			.updated | default/useradd | X11/xorg.conf.d/00-keyboard.conf | ssh/ssh_host_* | \
+			NetworkManager/system-connections/* | lvm/devices/* | lvm/archive* | lvm/backup*)
+			continue
+			;;
+		esac
+		case "$kind" in
+		M) kind=modified ;;
+		A) kind=added ;;
+		D) kind=deleted ;;
+		*) continue ;;
+		esac
+		lines+=("$(printf '  %-10s /etc/%s' "$kind" "$item")")
+	done <<<"$etc_diff"
+
+	if [ ${#lines[@]} -eq 0 ]; then
+		echo "No local changes on top of the system image."
+		return 0
+	fi
+	echo "Local changes on top of $(jq -r '.deployments[0] | .version // .checksum[0:12]' <<<"$status_json"):"
+	printf '%s\n' "${lines[@]}"
+}
+
 cmd_disable_update_notify() {
 	systemctl --user mask --now kctl-update-notify.timer
 	echo "Update notifications disabled. Re-enable with:"
@@ -141,6 +189,7 @@ fi
 case "${1:-help}" in
 upgrade) cmd_upgrade ;;
 rollback) cmd_rollback ;;
+overrides) cmd_overrides ;;
 disable-update-notify) cmd_disable_update_notify ;;
 enroll-secure-boot-key) cmd_enroll_secure_boot_key ;;
 help | --help | -h) usage ;;

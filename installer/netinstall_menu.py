@@ -7,8 +7,6 @@ from pathlib import Path
 FLAVORS = [
     ("kuubik", "kuubik"),
     ("kuubik-nvidia", "kuubik (nvidia)"),
-    ("kuubik-lts", "kuubik LTS"),
-    ("kuubik-lts-nvidia", "kuubik LTS (nvidia)"),
 ]
 
 

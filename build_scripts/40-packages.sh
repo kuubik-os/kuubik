@@ -2,7 +2,13 @@
 
 set -ouex pipefail
 
-dnf5 -y install distrobox zsh
+dnf5 -y install distrobox zsh zsh-syntax-highlighting eza bat ripgrep fd-find
+
+# vm-curator, latest release rpm, with qemu/kvm, uefi and tpm for its vms
+vmc_tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/mroboff/vm-curator/releases/latest)
+vmc_tag=${vmc_tag##*/}
+dnf5 -y install qemu-system-x86 qemu-img edk2-ovmf swtpm virt-viewer \
+	"https://github.com/mroboff/vm-curator/releases/download/${vmc_tag}/vm-curator-${vmc_tag#v}-1.x86_64.rpm"
 
 # tailscale ships disabled, enable with: systemctl enable --now tailscaled
 dnf5 -y config-manager addrepo --from-repofile=https://pkgs.tailscale.com/stable/fedora/tailscale.repo

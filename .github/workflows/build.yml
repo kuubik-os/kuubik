@@ -30,7 +30,6 @@ env:
   IMAGE_DESC: "${{ github.event.repository.name }}"
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
   FEDORA_VERSION: "44"
-  LTS_VERSION: "10"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -97,14 +96,6 @@ jobs:
           - flavor: nvidia
             image: kuubik-nvidia
             tag: nvidia
-          - flavor: lts
-            image: kuubik-lts
-            tag: latest
-            lts: true
-          - flavor: lts-nvidia
-            image: kuubik-lts-nvidia
-            tag: nvidia
-            lts: true
 
     runs-on: ubuntu-24.04
     timeout-minutes: 180
@@ -148,7 +139,7 @@ jobs:
         run: |
           for image in \
             ghcr.io/ublue-os/brew:latest \
-            ${{ matrix.lts && format('quay.io/almalinuxorg/atomic-desktop-kde:{0}', env.LTS_VERSION) || format('quay.io/fedora-ostree-desktops/kinoite:{0}', env.FEDORA_VERSION) }}; do
+            quay.io/fedora-ostree-desktops/kinoite:${{ env.FEDORA_VERSION }}; do
             for attempt in 1 2 3 4 5; do
               sudo buildah pull "${image}" && break
               [ "$attempt" -lt 5 ] || exit 1
@@ -173,7 +164,6 @@ jobs:
             --target ${{ matrix.image }} \
             --file Containerfile \
             --build-arg FEDORA_VERSION=${{ env.FEDORA_VERSION }} \
-            --build-arg LTS_VERSION=${{ env.LTS_VERSION }} \
             --build-arg IMAGE_VERSION=${{ needs.prepare.outputs.date_tag }} \
             --tag raw-img .
           rm -f secureboot.key
@@ -207,7 +197,7 @@ jobs:
             'rpm -qa --qf "%{NAME} %{VERSION}-%{RELEASE}\n" | grep -v "^gpg-pubkey " | LC_ALL=C sort -u' \
             > "release/packages-${{ matrix.image }}.txt"
           {
-            echo "base: ${{ matrix.lts && format('AlmaLinux {0}', env.LTS_VERSION) || format('Fedora {0}', env.FEDORA_VERSION) }}"
+            echo "base: Fedora ${{ env.FEDORA_VERSION }}"
             echo "kernel: $(sudo podman run --rm --entrypoint /bin/ls localhost/raw-img:latest /usr/lib/modules)"
             echo "plasma: $(sudo podman run --rm --entrypoint /usr/bin/rpm localhost/raw-img:latest -q --qf '%{VERSION}' plasma-workspace)"
           } > "release/meta-${{ matrix.image }}.txt"
@@ -229,7 +219,7 @@ jobs:
           tags: |
             type=raw,value=${{ needs.prepare.outputs.date_tag }}
             type=raw,value=latest
-            type=raw,value=${{ matrix.lts && env.LTS_VERSION || env.FEDORA_VERSION }}
+            type=raw,value=${{ env.FEDORA_VERSION }}
             type=raw,value=${{ matrix.tag }},enable=${{ matrix.tag != 'latest' }}
           labels: |
             org.opencontainers.image.created=${{ needs.prepare.outputs.date }}

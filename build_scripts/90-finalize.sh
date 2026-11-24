@@ -26,31 +26,22 @@ DRACUT_NO_XATTR=1 /usr/bin/dracut \
 	-f "/usr/lib/modules/$KERNEL_VERSION/initramfs.img"
 chmod 0600 "/usr/lib/modules/$KERNEL_VERSION/initramfs.img"
 
-# dnf5 on fedora, dnf4 on the lts base
-DNF=$(command -v dnf5 || command -v dnf)
-
 # mokutil enrolls the kuubik secure boot key, see kctl enroll-secure-boot-key
-"$DNF" -y install mokutil
+dnf5 -y install mokutil
 
 # shim only boots kernels signed by a key in db or mok, cachyos kernel is not
 SB_KEY=/run/secrets/secureboot_key
 if [ -s "$SB_KEY" ]; then
-	sb_extra=()
-	# sbsigntools comes from epel on the lts base
-	if ! grep -q '^ID=fedora$' /usr/lib/os-release; then
-		"$DNF" -y install epel-release
-		sb_extra=(epel-release)
-	fi
-	"$DNF" -y install sbsigntools openssl
+	dnf5 -y install sbsigntools openssl
 	openssl x509 -inform der -in /usr/share/kuubik/secureboot/kuubik.der -out /tmp/kuubik.pem
 	VMLINUZ="/usr/lib/modules/$KERNEL_VERSION/vmlinuz"
 	sbsign --key "$SB_KEY" --cert /tmp/kuubik.pem --output "$VMLINUZ" "$VMLINUZ"
 	sbverify --cert /tmp/kuubik.pem "$VMLINUZ"
-	"$DNF" -y remove sbsigntools "${sb_extra[@]}"
+	dnf5 -y remove sbsigntools
 fi
 
-"$DNF" -y remove "kernel-cachyos-*-devel-matched"
-"$DNF" -y clean all
+dnf5 -y remove "kernel-cachyos-*-devel-matched"
+dnf5 -y clean all
 
 rm -rfv /etc/yum.repos.d/*cachyos*
 rm -rfv /run/akmods /run/dnf /run/selinux-policy /tmp/*

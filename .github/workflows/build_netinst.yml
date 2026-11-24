@@ -10,7 +10,6 @@ on:
       - ".github/workflows/build_netinst.yml"
       - "installer/netinstall.ks"
       - "installer/netinstall_menu.py"
-      - "installer/updates/**"
       - "installer/system_files/usr/share/anaconda/post-scripts/**"
 
   push:
@@ -84,7 +83,7 @@ jobs:
             --workdir /work \
             "registry.fedoraproject.org/fedora:${FEDORA_VERSION}" \
             bash -euo pipefail -c '
-              dnf -y install lorax pykickstart xorriso mtools isomd5sum cpio
+              dnf -y install lorax pykickstart xorriso mtools isomd5sum
               ksvalidator kuubik.ks
               mkdir -p grub
               xorriso -osirrox on -indev netinst.iso \
@@ -96,9 +95,7 @@ jobs:
               xorriso -indev netinst.iso -outdev menu.iso -boot_image any replay \
                 -update grub/efi.cfg /EFI/BOOT/grub.cfg \
                 -update grub/bios.cfg /boot/grub2/grub.cfg
-              # updates.img overlays the installer root: kuubik product name, no fedora sidebar logo
-              (cd installer/updates && find . | cpio -o -H newc --quiet | gzip -9) >updates.img
-              mkksiso --ks kuubik.ks --updates updates.img menu.iso upload/kuubik-netinstall-amd64.iso
+              mkksiso --ks kuubik.ks menu.iso upload/kuubik-netinstall-amd64.iso
             '
           sudo chown -R "$(id -u):$(id -g)" upload
           cd upload && sha256sum ./*.iso | tee kuubik-netinstall-amd64.iso-CHECKSUM

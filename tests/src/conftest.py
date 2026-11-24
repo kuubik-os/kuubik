@@ -115,12 +115,6 @@ def is_nvidia(ssh_command) -> bool:
 
 
 @pytest.fixture(scope="session")
-def is_lts(ssh_command) -> bool:
-    """whether the vm runs an lts (el based) flavor"""
-    return ssh_command("grep -qx ID=fedora /usr/lib/os-release", check=False).returncode != 0
-
-
-@pytest.fixture(scope="session")
 def desktop_session(wait_for) -> None:
     """wait until the autologin plasma session is up"""
     wait_for("pgrep -u test_user -x plasmashell", timeout=600, interval=5)
