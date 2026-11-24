@@ -271,7 +271,7 @@ jobs:
         run: &push |
           for tag in ${TAGS}; do
             for attempt in 1 2 3 4 5; do
-              podman push "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:$tag" && break
+              podman push --compression-format=zstd --compression-level=3 "${{ env.IMAGE_REGISTRY }}/${{ matrix.image }}:$tag" && break
               [ "$attempt" -lt 5 ] || exit 1
               echo "push of $tag failed, retrying in 10s"
               sleep 10
