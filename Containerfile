@@ -22,11 +22,11 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/var \
     --mount=type=tmpfs,dst=/tmp \
-    /ctx/fedora/10-kernel.sh && \
-    /ctx/fedora/20-multimedia.sh && \
-    /ctx/fedora/30-debloat.sh && \
-    /ctx/fedora/40-packages.sh && \
-    /ctx/shared/50-system-config.sh
+    /ctx/10-kernel.sh && \
+    /ctx/20-multimedia.sh && \
+    /ctx/30-debloat.sh && \
+    /ctx/40-packages.sh && \
+    /ctx/50-system-config.sh
 
 FROM base AS kuubik
 ARG IMAGE_VERSION=""
@@ -36,7 +36,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=tmpfs,dst=/var \
     --mount=type=tmpfs,dst=/tmp \
     --mount=type=secret,id=secureboot_key \
-    /ctx/shared/90-finalize.sh
+    /ctx/90-finalize.sh
 RUN bootc container lint
 
 FROM base AS kuubik-nvidia
@@ -45,7 +45,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=tmpfs,dst=/var \
     --mount=type=tmpfs,dst=/tmp \
     --mount=type=secret,id=secureboot_key \
-    /ctx/fedora/60-nvidia.sh
+    /ctx/60-nvidia.sh
 # after the driver install, nvidia packages ship their own 99-nvidia.conf
 COPY system_files/nvidia /
 ARG IMAGE_VERSION=""
@@ -55,6 +55,6 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=tmpfs,dst=/var \
     --mount=type=tmpfs,dst=/tmp \
     --mount=type=secret,id=secureboot_key \
-    /ctx/shared/90-finalize.sh
+    /ctx/90-finalize.sh
 RUN bootc container lint
 
