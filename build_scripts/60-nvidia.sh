@@ -65,6 +65,12 @@ fi
 dnf5 -y config-manager addrepo --from-repofile=https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo
 dnf5 -y install --from-repo=nvidia-container-toolkit nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
 
+# selinux blocks /dev/nvidia* in containers (nvml "insufficient permissions") unless this is on.
+# the policy store is in /etc/selinux, so it ships with the image
+semanage boolean -m --on container_use_devices
+
 dnf5 -y remove akmods akmod-nvidia
 rm -fv /etc/yum.repos.d/nvidia-container-toolkit.repo /etc/yum.repos.d/fedora-nvidia.repo
 rm -fv /usr/share/applications/nvtop.desktop
+# nvidia-settings --load-config-only only works on x11, fails on every wayland login
+rm -fv /etc/xdg/autostart/nvidia-settings-load.desktop
