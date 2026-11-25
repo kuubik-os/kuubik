@@ -1,6 +1,6 @@
 import pytest
 
-FEDORA_FREEWORLD = ["mesa-va-drivers-freeworld", "mesa-vulkan-drivers-freeworld"]
+TERRA = ["mesa-dri-drivers", "mesa-vulkan-drivers", "steam"]
 
 
 def test_full_ffmpeg_installed(ssh_command):
@@ -10,8 +10,10 @@ def test_full_ffmpeg_installed(ssh_command):
 
 
 def test_hw_video_drivers_installed(ssh_command):
-    packages = ["intel-media-driver"] + FEDORA_FREEWORLD
-    ssh_command(f"rpm -q {' '.join(packages)}")
+    ssh_command("rpm -q intel-media-driver")
+    result = ssh_command(f"rpm -q --qf '%{{vendor}}\\n' {' '.join(TERRA)}")
+    # every arch of these, including steam's i686 mesa, must come from terra
+    assert set(result.stdout.split()) == {"Terra"}, result.stdout
 
 
 # encode with ffmpeg, then decode through gstreamer like plasma apps and browsers do
