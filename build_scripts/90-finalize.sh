@@ -7,15 +7,6 @@ KERNEL_VERSION=$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -printf '
 mkdir -p /var/tmp
 chmod 1777 /var/tmp
 
-# grub titles entries from os-release, keep it in sync with the image version label
-if [ -n "${IMAGE_VERSION:-}" ]; then
-	sed -i \
-		-e "s|^VERSION=.*|VERSION=\"${IMAGE_VERSION} (kuubik)\"|" \
-		-e "s|^PRETTY_NAME=.*|PRETTY_NAME=\"kuubik Linux ${IMAGE_VERSION}\"|" \
-		-e "s|^OSTREE_VERSION=.*|OSTREE_VERSION='${IMAGE_VERSION}'|" \
-		/usr/lib/os-release
-fi
-
 depmod -a "$KERNEL_VERSION"
 DRACUT_NO_XATTR=1 /usr/bin/dracut \
 	--no-hostonly \
@@ -25,6 +16,16 @@ DRACUT_NO_XATTR=1 /usr/bin/dracut \
 	--add ostree \
 	-f "/usr/lib/modules/$KERNEL_VERSION/initramfs.img"
 chmod 0600 "/usr/lib/modules/$KERNEL_VERSION/initramfs.img"
+
+# after dracut: the initramfs copies os-release, a version in it would change the initramfs every build.
+# grub titles entries from os-release, keep it in sync with the image version label
+if [ -n "${IMAGE_VERSION:-}" ]; then
+	sed -i \
+		-e "s|^VERSION=.*|VERSION=\"${IMAGE_VERSION} (kuubik)\"|" \
+		-e "s|^PRETTY_NAME=.*|PRETTY_NAME=\"kuubik Linux ${IMAGE_VERSION}\"|" \
+		-e "s|^OSTREE_VERSION=.*|OSTREE_VERSION='${IMAGE_VERSION}'|" \
+		/usr/lib/os-release
+fi
 
 # mokutil enrolls the kuubik secure boot key, see kctl enroll-secure-boot-key
 dnf5 -y install mokutil

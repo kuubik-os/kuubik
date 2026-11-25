@@ -15,4 +15,4 @@ COPY tests/src/ ./
 
 ENTRYPOINT ["uv", "run", "pytest"]
 
-CMD ["--junitxml=/tmp/test-results/junit.xml"]
+CMD ["--junitxml=/tmp/test-results/junit.xml", "--durations=0", "--durations-min=1"]
