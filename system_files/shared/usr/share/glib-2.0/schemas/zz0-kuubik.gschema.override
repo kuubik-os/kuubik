@@ -1,0 +1,4 @@
+# plasma's gtkconfig never sets a gtk theme on new accounts, so gtk apps fell back to adwaita.
+# flatpak also reads this to auto-install the matching org.gtk.Gtk3theme.Breeze extension
+[org.gnome.desktop.interface]
+gtk-theme='Breeze'

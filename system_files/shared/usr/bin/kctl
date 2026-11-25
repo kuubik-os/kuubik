@@ -140,13 +140,19 @@ cmd_overrides() {
 		(.["initramfs-etc"][]? | ["initramfs", "includes \(.)"]) | @tsv' <<<"$status_json")
 
 	while read -r kind item; do
-		# differ on every install: written by the installer, first boot or account and network setup
+		# differ on every install: written by the installer, first boot, account and network setup,
+		# or runtime state of system services (uresourced set-property, tuned-ppd, cups, augenrules)
 		case "$item" in
 		passwd | passwd- | group | group- | shadow | shadow- | gshadow | gshadow- | \
 			subuid | subuid- | subgid | subgid- | .pwd.lock | machine-id | hostname | \
 			localtime | adjtime | locale.conf | vconsole.conf | fstab | crypttab | resolv.conf | \
 			.updated | default/useradd | X11/xorg.conf.d/00-keyboard.conf | ssh/ssh_host_* | \
-			NetworkManager/system-connections/* | lvm/devices/* | lvm/archive* | lvm/backup*)
+			NetworkManager/system-connections/* | lvm/devices/* | lvm/archive* | lvm/backup* | \
+			sysconfig/anaconda | systemd/system/default.target | nvme/hostnqn | nvme/hostid | \
+			plasma-setup-done | .linuxbrew | .fedora-kinoite-plasmalogin-workaround | .rpm-ostree-shadow-mode-fixed2.stamp | \
+			systemd/system.control | systemd/system.control/* | audit/audit.rules | \
+			cups | cups/subscriptions.conf | cups/subscriptions.conf.O | foomatic/hashes.d/* | \
+			modprobe.d/tuned.conf | tuned/active_profile | tuned/profile_mode | tuned/ppd_base_profile | tuned/bootcmdline)
 			continue
 			;;
 		esac
