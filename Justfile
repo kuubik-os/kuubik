@@ -94,6 +94,12 @@ run-vm image=("localhost/" + image_name + ":latest"): (build-disk image)
         --volume "${PWD}/output/image/disk.raw:/boot.raw" \
         docker.io/qemux/qemu
 
+# run the podman tests inside a container image, no VM needed
+test-podman image:
+    podman build --build-arg IMAGE={{ image }} -f tests/podman.Containerfile -t localhost/kuubik-podman-test:latest .
+    mkdir -p test-results
+    podman run --rm -v "${PWD}/test-results:/test-results:Z" localhost/kuubik-podman-test:latest
+
 # run the integration tests against a container image booted in a VM
 test image:
     #!/usr/bin/env bash

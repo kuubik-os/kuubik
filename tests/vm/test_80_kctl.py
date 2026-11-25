@@ -2,17 +2,6 @@ FACTORY_REF = "kuubik/factory"
 REPO = "/sysroot/ostree/repo"
 
 
-def test_kctl_help_and_unknown_command(ssh_command):
-    ssh_command("kctl help")
-    result = ssh_command("kctl no-such-command", check=False)
-    assert result.returncode == 1, f"unknown command exited {result.returncode}"
-
-
-def test_kctl_upgrade_can_be_declined(ssh_command):
-    result = ssh_command("echo n | kctl upgrade")
-    assert "Aborted." in result.stdout, f"unexpected output: {result.stdout}"
-
-
 def test_factory_ref_is_first_booted_image(ssh_command, wait_for):
     wait_for(f"test -e {REPO}/refs/heads/{FACTORY_REF}", timeout=120)
     factory = ssh_command(f"ostree rev-parse --repo={REPO} {FACTORY_REF}").stdout.strip()
