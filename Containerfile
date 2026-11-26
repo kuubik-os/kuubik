@@ -1,4 +1,5 @@
-ARG FEDORA_VERSION=44
+# from the fedora-version file, passed in by the Justfile and CI
+ARG FEDORA_VERSION
 
 FROM scratch AS ctx
 COPY build_scripts /

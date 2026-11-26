@@ -1,5 +1,5 @@
 image_name := env("IMAGE_NAME", "kuubik")
-fedora_version := env("FEDORA_VERSION", "44")
+fedora_version := trim(read(justfile_directory() / "fedora-version"))
 bib_image := env("BIB_IMAGE", "quay.io/centos-bootc/bootc-image-builder:latest")
 vm_gpu := env("VM_GPU", "Y")
 wait_seconds := env("TEST_SSH_WAIT_SECONDS", "1800")

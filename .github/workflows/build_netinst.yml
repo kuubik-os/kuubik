@@ -8,24 +8,21 @@ on:
       - main
     paths: &paths
       - ".github/workflows/build_netinst.yml"
-      - "installer/netinstall.ks"
-      - "installer/netinstall_menu.py"
-      - "installer/system_files/usr/share/anaconda/post-scripts/**"
+      - "installer/**"
+      - "fedora-version"
 
   push:
     branches:
       - main
     paths: *paths
 
-  # iso pulls the latest image at install time, rebuild only to keep the artifact from expiring
   schedule:
-    - cron: '0 6 1 */2 *'
+    - cron: '0 6 1 * *'
 
   workflow_dispatch:
 
 env:
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
-  FEDORA_VERSION: "44"
 
 permissions: {}
 
@@ -47,6 +44,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+
+      - name: Read Fedora version
+        run: echo "FEDORA_VERSION=$(<fedora-version)" >>"$GITHUB_ENV"
 
       # stock fedora iso keeps fedora's signed shim, grub and kernel, so it boots with secure boot on
       - name: Download fedora netinstall ISO
@@ -98,7 +98,10 @@ jobs:
               mkksiso --ks kuubik.ks menu.iso upload/kuubik-netinstall-amd64.iso
             '
           sudo chown -R "$(id -u):$(id -g)" upload
-          cd upload && sha256sum ./*.iso | tee kuubik-netinstall-amd64.iso-CHECKSUM
+          iso="kuubik-netinstall-amd64-$(date -u +%Y%m%d).iso"
+          echo "ISO=${iso}" >>"$GITHUB_ENV"
+          mv upload/kuubik-netinstall-amd64.iso "upload/${iso}"
+          cd upload && sha256sum "./${iso}" | tee "${iso}-CHECKSUM"
 
       - name: Install Cosign
         if: github.event_name != 'pull_request'
@@ -116,6 +119,7 @@ jobs:
           done
 
       - name: Upload ISO
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kuubik-netinstall-amd64
@@ -126,14 +130,28 @@ jobs:
           overwrite: true
 
       # fixed "netinstall" release so the latest iso has a stable download url; kept off "latest" so
-      # build.yml still diffs packages against the last image release
+      # build.yml still diffs packages against the last image release.
+      # the website and readme link kuubik-netinstall-amd64.iso{,-CHECKSUM,.sig}, so the dated iso is
+      # also published under that name; older dated isos are removed once the new one is up
       - name: Publish ISO to netinstall release
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
-          gh release view netinstall --repo "${{ github.repository }}" >/dev/null 2>&1 \
-            || gh release create netinstall --repo "${{ github.repository }}" --target "${{ github.sha }}" \
-              --latest=false --title "kuubik netinstall ISO" \
-              --notes "latest netinstall ISO, rebuilt every 2 months. pick the flavor in the boot menu."
-          gh release upload netinstall --repo "${{ github.repository }}" --clobber upload/*
+          set -euo pipefail
+          stable=kuubik-netinstall-amd64.iso
+          notes="latest netinstall ISO (${ISO}), rebuilt every month. pick the flavor in the boot menu."
+          ln "upload/${ISO}" "upload/${stable}"
+          cp "upload/${ISO}.sig" "upload/${stable}.sig"
+          (cd upload && sha256sum "./${stable}" >"${stable}-CHECKSUM")
+          gh release view netinstall --repo "${REPO}" >/dev/null 2>&1 \
+            || gh release create netinstall --repo "${REPO}" --target "${{ github.sha }}" \
+              --latest=false --title "kuubik netinstall ISO" --notes "${notes}"
+          gh release upload netinstall --repo "${REPO}" --clobber upload/*
+          gh release edit netinstall --repo "${REPO}" --notes "${notes}"
+          old=$(gh release view netinstall --repo "${REPO}" --json assets -q '.assets[].name' \
+            | grep -E '^kuubik-netinstall-amd64-[0-9]{8}\.iso' | grep -vF "${ISO}" || true)
+          for asset in ${old}; do
+            gh release delete-asset netinstall --repo "${REPO}" "${asset}" -y
+          done
