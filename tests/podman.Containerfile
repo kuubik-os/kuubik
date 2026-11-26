@@ -2,7 +2,6 @@ ARG IMAGE
 FROM ${IMAGE}
 # what the image is expected to be, so a broken image can't pass by looking like another flavor
 ARG KUUBIK_FLAVOR
-ARG KUUBIK_EXPECT_SIGNED=0
 ARG KUUBIK_IMAGE_VERSION=""
 ARG KUUBIK_FEDORA_VERSION=""
 # pytest runs inside the image under test, so commands see the image as it ships
@@ -14,7 +13,6 @@ COPY system_files /tests/data/system_files
 WORKDIR /tests
 ENV PYTHONDONTWRITEBYTECODE=1 \
     KUUBIK_FLAVOR=${KUUBIK_FLAVOR} \
-    KUUBIK_EXPECT_SIGNED=${KUUBIK_EXPECT_SIGNED} \
     KUUBIK_IMAGE_VERSION=${KUUBIK_IMAGE_VERSION} \
     KUUBIK_FEDORA_VERSION=${KUUBIK_FEDORA_VERSION}
 ENTRYPOINT ["python3", "-m", "pytest", "-p", "no:cacheprovider"]

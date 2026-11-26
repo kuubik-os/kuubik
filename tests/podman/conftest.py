@@ -60,12 +60,6 @@ def is_nvidia(flavor) -> bool:
 
 
 @pytest.fixture(scope="session")
-def expect_signed() -> bool:
-    """whether the image was built with the secure boot key"""
-    return os.environ.get("KUUBIK_EXPECT_SIGNED", "0") == "1"
-
-
-@pytest.fixture(scope="session")
 def image_version() -> str:
     """IMAGE_VERSION the image was built with, empty for local builds"""
     return os.environ.get("KUUBIK_IMAGE_VERSION", "")

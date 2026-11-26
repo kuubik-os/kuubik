@@ -155,10 +155,10 @@ jobs:
         env:
           SECUREBOOT_KEY: ${{ secrets.SECUREBOOT_KEY }}
         run: |
-          # empty for fork PRs, the build then skips secure boot signing
+          # every build is signed, so fork PRs (no secrets) can't build
           (umask 077 && printf '%s' "${SECUREBOOT_KEY}" > secureboot.key)
-          if [[ "${PUBLISH}" == "true" && ! -s secureboot.key ]]; then
-            echo "SECUREBOOT_KEY secret is required to publish" >&2
+          if [[ ! -s secureboot.key ]]; then
+            echo "SECUREBOOT_KEY secret is required" >&2
             exit 1
           fi
           sudo buildah build \
@@ -169,14 +169,10 @@ jobs:
             --build-arg FEDORA_VERSION=${{ env.FEDORA_VERSION }} \
             --build-arg IMAGE_VERSION=${{ needs.prepare.outputs.date_tag }} \
             --tag raw-img .
-          # the podman tests then fail an unsigned kernel instead of skipping
-          if [[ -s secureboot.key ]]; then
-            echo "EXPECT_SIGNED=1" >> "$GITHUB_ENV"
-          fi
           rm -f secureboot.key
 
       - name: Run podman tests
-        run: sudo just test-podman localhost/raw-img:latest ${{ matrix.image }} "${EXPECT_SIGNED:-0}" ${{ needs.prepare.outputs.date_tag }}
+        run: sudo just test-podman localhost/raw-img:latest ${{ matrix.image }} ${{ needs.prepare.outputs.date_tag }}
 
       - name: Run VM tests
         if: env.PUBLISH == 'true'

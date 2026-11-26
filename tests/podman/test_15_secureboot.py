@@ -1,5 +1,3 @@
-import pytest
-
 CERT = "/usr/share/kuubik/secureboot/kuubik.der"
 SIGNER = "kuubik secure boot"
 
@@ -10,15 +8,12 @@ def test_secureboot_cert_and_mokutil(run):
     run("command -v mokutil")
 
 
-def test_kernel_modules_signed_with_kernel(run, kernel_version, is_nvidia, expect_signed):
-    # builds without the secureboot_key secret (fork PRs) are unsigned on purpose.
+def test_kernel_modules_signed_with_kernel(run, kernel_version, is_nvidia):
     # the signature embeds the cert, so its subject shows up in the vmlinuz bytes
     signed = run(
         f"grep -aqF '{SIGNER}' /usr/lib/modules/{kernel_version}/vmlinuz", check=False
     ).returncode == 0
-    if not signed:
-        assert not expect_signed, "built with the secure boot key, but the kernel is not signed"
-        pytest.skip("kernel is not signed, image built without the secure boot key")
+    assert signed, "kernel is not signed with the kuubik secure boot key"
 
     result = run(
         f"find /usr/lib/modules/{kernel_version}/extra -name '*.ko*' "

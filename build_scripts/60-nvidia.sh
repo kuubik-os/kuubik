@@ -2,6 +2,12 @@
 
 set -ouex pipefail
 
+SB_KEY=/run/secrets/secureboot_key
+if [ ! -s "$SB_KEY" ]; then
+	echo "ERROR: secureboot_key build secret is missing, images are always secure boot signed" >&2
+	exit 1
+fi
+
 # a real repo file, not --enablerepo: akmods runs its own dnf transactions
 dnf5 -y config-manager addrepo --from-repofile=https://negativo17.org/repos/fedora-nvidia.repo
 
@@ -17,14 +23,11 @@ mkdir -p /var/tmp /tmp
 chmod 1777 /var/tmp /tmp
 
 KERNEL_VERSION=$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -printf '%f\n' -quit)
-SB_KEY=/run/secrets/secureboot_key
 CERT=/usr/share/kuubik/secureboot/kuubik.der
 
-# akmods signs the kmod with the key pair in /etc/pki/akmods, use the kuubik secure boot key when the build has it
-if [ -s "$SB_KEY" ]; then
-	install -D -m 0640 -g akmods "$SB_KEY" /etc/pki/akmods/private/private_key.priv
-	install -D -m 0644 "$CERT" /etc/pki/akmods/certs/public_key.der
-fi
+# akmods signs the kmod with the key pair in /etc/pki/akmods
+install -D -m 0640 -g akmods "$SB_KEY" /etc/pki/akmods/private/private_key.priv
+install -D -m 0644 "$CERT" /etc/pki/akmods/certs/public_key.der
 akmods --force --kernels "${KERNEL_VERSION}" --kmod nvidia
 
 # akmods exits 0 even when the build fails
@@ -34,33 +37,31 @@ if ! find "/usr/lib/modules/${KERNEL_VERSION}" -iname 'nvidia.ko*' -print -quit 
 	exit 1
 fi
 
-if [ -s "$SB_KEY" ]; then
-	# sign whatever akmods left unsigned
-	sign_file="/usr/src/kernels/${KERNEL_VERSION}/scripts/sign-file"
-	while read -r mod; do
-		if [ -z "$(modinfo -F signer "$mod")" ]; then
-			case "$mod" in
-			*.ko.xz)
-				xz -d "$mod"
-				"$sign_file" sha256 "$SB_KEY" "$CERT" "${mod%.xz}"
-				# kernel xz decoder only supports crc32
-				xz --check=crc32 "${mod%.xz}"
-				;;
-			*.ko) "$sign_file" sha256 "$SB_KEY" "$CERT" "$mod" ;;
-			*)
-				echo "ERROR: unsupported module compression: ${mod}" >&2
-				exit 1
-				;;
-			esac
-		fi
-		signer=$(modinfo -F signer "$mod")
-		if [ "$signer" != "kuubik secure boot" ]; then
-			echo "ERROR: ${mod} not signed with the kuubik secure boot key (signer: '${signer}')" >&2
+# sign whatever akmods left unsigned
+sign_file="/usr/src/kernels/${KERNEL_VERSION}/scripts/sign-file"
+while read -r mod; do
+	if [ -z "$(modinfo -F signer "$mod")" ]; then
+		case "$mod" in
+		*.ko.xz)
+			xz -d "$mod"
+			"$sign_file" sha256 "$SB_KEY" "$CERT" "${mod%.xz}"
+			# kernel xz decoder only supports crc32
+			xz --check=crc32 "${mod%.xz}"
+			;;
+		*.ko) "$sign_file" sha256 "$SB_KEY" "$CERT" "$mod" ;;
+		*)
+			echo "ERROR: unsupported module compression: ${mod}" >&2
 			exit 1
-		fi
-	done < <(find "/usr/lib/modules/${KERNEL_VERSION}/extra" -name '*.ko*')
-	rm -f /etc/pki/akmods/private/private_key.priv
-fi
+			;;
+		esac
+	fi
+	signer=$(modinfo -F signer "$mod")
+	if [ "$signer" != "kuubik secure boot" ]; then
+		echo "ERROR: ${mod} not signed with the kuubik secure boot key (signer: '${signer}')" >&2
+		exit 1
+	fi
+done < <(find "/usr/lib/modules/${KERNEL_VERSION}/extra" -name '*.ko*')
+rm -f /etc/pki/akmods/private/private_key.priv
 
 dnf5 -y config-manager addrepo --from-repofile=https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo
 dnf5 -y install --from-repo=nvidia-container-toolkit nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
