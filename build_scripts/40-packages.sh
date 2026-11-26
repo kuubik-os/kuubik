@@ -10,6 +10,8 @@ vmc_tag=${vmc_tag##*/}
 dnf5 -y install qemu-system-x86 qemu-img edk2-ovmf swtpm virt-viewer \
 	"https://github.com/mroboff/vm-curator/releases/download/${vmc_tag}/vm-curator-${vmc_tag#v}-1.x86_64.rpm"
 
+rm -fv /usr/share/applications/remote-viewer.desktop
+
 # tailscale ships disabled, enable with: systemctl enable --now tailscaled
 dnf5 -y config-manager addrepo --from-repofile=https://pkgs.tailscale.com/stable/fedora/tailscale.repo
 dnf5 -y install tailscale

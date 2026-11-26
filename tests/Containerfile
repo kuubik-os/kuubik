@@ -8,11 +8,11 @@ RUN apt-get update \
 
 WORKDIR /opt/tests
 
-COPY tests/src/pyproject.toml ./
+COPY tests/vm/pyproject.toml ./
 RUN uv sync --no-cache
 
-COPY tests/src/ ./
+COPY tests/vm/ ./
 
 ENTRYPOINT ["uv", "run", "pytest"]
 
-CMD ["--junitxml=/tmp/test-results/junit.xml", "--durations=0", "--durations-min=1"]
+CMD ["--junitxml=/tmp/test-results/vm.xml", "--durations=0", "--durations-min=1"]

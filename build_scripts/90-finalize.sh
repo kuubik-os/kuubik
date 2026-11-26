@@ -32,14 +32,16 @@ dnf5 -y install mokutil
 
 # shim only boots kernels signed by a key in db or mok, cachyos kernel is not
 SB_KEY=/run/secrets/secureboot_key
-if [ -s "$SB_KEY" ]; then
-	dnf5 -y install sbsigntools openssl
-	openssl x509 -inform der -in /usr/share/kuubik/secureboot/kuubik.der -out /tmp/kuubik.pem
-	VMLINUZ="/usr/lib/modules/$KERNEL_VERSION/vmlinuz"
-	sbsign --key "$SB_KEY" --cert /tmp/kuubik.pem --output "$VMLINUZ" "$VMLINUZ"
-	sbverify --cert /tmp/kuubik.pem "$VMLINUZ"
-	dnf5 -y remove sbsigntools
+if [ ! -s "$SB_KEY" ]; then
+	echo "ERROR: secureboot_key build secret is missing, images are always secure boot signed" >&2
+	exit 1
 fi
+dnf5 -y install sbsigntools openssl
+openssl x509 -inform der -in /usr/share/kuubik/secureboot/kuubik.der -out /tmp/kuubik.pem
+VMLINUZ="/usr/lib/modules/$KERNEL_VERSION/vmlinuz"
+sbsign --key "$SB_KEY" --cert /tmp/kuubik.pem --output "$VMLINUZ" "$VMLINUZ"
+sbverify --cert /tmp/kuubik.pem "$VMLINUZ"
+dnf5 -y remove sbsigntools
 
 dnf5 -y remove "kernel-cachyos-*-devel-matched"
 dnf5 -y clean all

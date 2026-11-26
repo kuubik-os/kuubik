@@ -12,6 +12,9 @@ rm -rf /usr/share/wallpapers/F[0-9]* \
 	/usr/share/backgrounds/f[0-9]* /usr/share/backgrounds/fedora-* \
 	/usr/share/backgrounds/default* /usr/share/backgrounds/desktop-backgrounds-default.xml
 
+# picks up zz0-kuubik.gschema.override
+glib-compile-schemas /usr/share/glib-2.0/schemas
+
 systemctl enable brew-setup.service
 echo 'HOMEBREW_NO_AUTO_UPDATE=1' >>/etc/environment
 

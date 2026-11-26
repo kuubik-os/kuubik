@@ -1,5 +1,5 @@
 image_name := env("IMAGE_NAME", "kuubik")
-fedora_version := env("FEDORA_VERSION", "44")
+fedora_version := trim(read(justfile_directory() / "fedora-version"))
 bib_image := env("BIB_IMAGE", "quay.io/centos-bootc/bootc-image-builder:latest")
 vm_gpu := env("VM_GPU", "Y")
 wait_seconds := env("TEST_SSH_WAIT_SECONDS", "1800")
@@ -22,7 +22,7 @@ build target=image_name tag="latest":
         --pull=newer \
         --build-arg FEDORA_VERSION={{ fedora_version }} \
         --label org.opencontainers.image.version=$(date -u +%Y%m%d).0 \
-        $(test -f secureboot.key && echo --secret id=secureboot_key,src=secureboot.key) \
+        --secret id=secureboot_key,src=secureboot.key \
         --target {{ target }} \
         --tag {{ target }}:{{ tag }} \
         .
@@ -93,6 +93,18 @@ run-vm image=("localhost/" + image_name + ":latest"): (build-disk image)
         --device=/dev/kvm \
         --volume "${PWD}/output/image/disk.raw:/boot.raw" \
         docker.io/qemux/qemu
+
+# run the podman tests inside a container image, no VM needed.
+# version is the IMAGE_VERSION the image was built with (empty skips the os-release check)
+test-podman image flavor=(if image =~ "nvidia" { "kuubik-nvidia" } else { "kuubik" }) version="":
+    podman build \
+        --build-arg IMAGE={{ image }} \
+        --build-arg KUUBIK_FLAVOR={{ flavor }} \
+        --build-arg KUUBIK_IMAGE_VERSION={{ version }} \
+        --build-arg KUUBIK_FEDORA_VERSION={{ fedora_version }} \
+        -f tests/podman.Containerfile -t localhost/kuubik-podman-test:latest .
+    mkdir -p test-results
+    podman run --rm -v "${PWD}/test-results:/test-results:Z" localhost/kuubik-podman-test:latest
 
 # run the integration tests against a container image booted in a VM
 test image:

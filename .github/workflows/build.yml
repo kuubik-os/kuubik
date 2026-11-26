@@ -6,20 +6,17 @@ on:
   pull_request:
     branches:
       - main
-    paths: &paths
+    paths:
       - ".github/workflows/build.yml"
       - "build_scripts/**"
       - "system_files/**"
       - "Containerfile"
       - "Justfile"
+      - "fedora-version"
       - "disk_config/**"
       - "tests/**"
 
-  push:
-    branches:
-      - main
-    paths: *paths
-
+  # releases only come from the schedule or a manual run, merges to main don't build
   schedule:
     # tuesday 15:00 UTC
     - cron: '0 15 * * 2'
@@ -29,7 +26,6 @@ on:
 env:
   IMAGE_DESC: "${{ github.event.repository.name }}"
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"
-  FEDORA_VERSION: "44"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -106,7 +102,7 @@ jobs:
       id-token: write
 
     env:
-      # only main builds are pushed, PR runs build and test locally
+      # only scheduled or manual runs on main publish and run the VM tests, PR runs only run the podman tests
       PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
 
     steps:
@@ -127,6 +123,9 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+
+      - name: Read Fedora version
+        run: echo "FEDORA_VERSION=$(<fedora-version)" >>"$GITHUB_ENV"
 
       - name: Install just
         run: |
@@ -159,10 +158,10 @@ jobs:
         env:
           SECUREBOOT_KEY: ${{ secrets.SECUREBOOT_KEY }}
         run: |
-          # empty for fork PRs, the build then skips secure boot signing
+          # every build is signed, so fork PRs (no secrets) can't build
           (umask 077 && printf '%s' "${SECUREBOOT_KEY}" > secureboot.key)
-          if [[ "${PUBLISH}" == "true" && ! -s secureboot.key ]]; then
-            echo "SECUREBOOT_KEY secret is required to publish" >&2
+          if [[ ! -s secureboot.key ]]; then
+            echo "SECUREBOOT_KEY secret is required" >&2
             exit 1
           fi
           sudo buildah build \
@@ -175,7 +174,11 @@ jobs:
             --tag raw-img .
           rm -f secureboot.key
 
-      - name: Run integration tests
+      - name: Run podman tests
+        run: sudo just test-podman localhost/raw-img:latest ${{ matrix.image }} ${{ needs.prepare.outputs.date_tag }}
+
+      - name: Run VM tests
+        if: env.PUBLISH == 'true'
         run: just test localhost/raw-img:latest
 
       - name: Disk usage after tests
@@ -197,7 +200,7 @@ jobs:
         if: env.PUBLISH == 'true'
         run: |
           sudo rm -rf output
-          sudo podman rmi -f localhost/kuubik-test:latest localhost/kuubik-test-runner:latest
+          sudo podman rmi -f localhost/kuubik-test:latest localhost/kuubik-test-runner:latest localhost/kuubik-podman-test:latest
 
       # rechunk deletes raw-img, so collect release info first
       - name: Collect release info
