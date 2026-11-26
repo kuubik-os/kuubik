@@ -1,0 +1,4 @@
+# enabled in the build scripts too, this keeps them on when something runs systemctl preset-all
+enable ananicy-cpp.service
+enable brew-setup.service
+enable kuubik-factory-image.service

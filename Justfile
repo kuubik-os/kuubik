@@ -94,9 +94,16 @@ run-vm image=("localhost/" + image_name + ":latest"): (build-disk image)
         --volume "${PWD}/output/image/disk.raw:/boot.raw" \
         docker.io/qemux/qemu
 
-# run the podman tests inside a container image, no VM needed
-test-podman image:
-    podman build --build-arg IMAGE={{ image }} -f tests/podman.Containerfile -t localhost/kuubik-podman-test:latest .
+# run the podman tests inside a container image, no VM needed. signed=1 fails unsigned kernels,
+# version is the IMAGE_VERSION the image was built with (empty skips the os-release check)
+test-podman image flavor=(if image =~ "nvidia" { "kuubik-nvidia" } else { "kuubik" }) signed=(if path_exists("secureboot.key") == "true" { "1" } else { "0" }) version="":
+    podman build \
+        --build-arg IMAGE={{ image }} \
+        --build-arg KUUBIK_FLAVOR={{ flavor }} \
+        --build-arg KUUBIK_EXPECT_SIGNED={{ signed }} \
+        --build-arg KUUBIK_IMAGE_VERSION={{ version }} \
+        --build-arg KUUBIK_FEDORA_VERSION={{ fedora_version }} \
+        -f tests/podman.Containerfile -t localhost/kuubik-podman-test:latest .
     mkdir -p test-results
     podman run --rm -v "${PWD}/test-results:/test-results:Z" localhost/kuubik-podman-test:latest
 

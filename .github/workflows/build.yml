@@ -169,10 +169,14 @@ jobs:
             --build-arg FEDORA_VERSION=${{ env.FEDORA_VERSION }} \
             --build-arg IMAGE_VERSION=${{ needs.prepare.outputs.date_tag }} \
             --tag raw-img .
+          # the podman tests then fail an unsigned kernel instead of skipping
+          if [[ -s secureboot.key ]]; then
+            echo "EXPECT_SIGNED=1" >> "$GITHUB_ENV"
+          fi
           rm -f secureboot.key
 
       - name: Run podman tests
-        run: sudo just test-podman localhost/raw-img:latest
+        run: sudo just test-podman localhost/raw-img:latest ${{ matrix.image }} "${EXPECT_SIGNED:-0}" ${{ needs.prepare.outputs.date_tag }}
 
       - name: Run VM tests
         if: env.PUBLISH == 'true'

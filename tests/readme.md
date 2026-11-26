@@ -4,10 +4,13 @@ two pytest suites against a built image.
 
 ## podman
 
-`tests/podman/` runs inside the image under test (`tests/podman.Containerfile` adds pytest), so it only covers what needs no booted system: kernel modules and signing, nvidia driver stack, unit enablement, `kctl-update-check`, multimedia codecs, vulkan drivers, dev tooling, container policy, `kctl` basics. Runs on every PR in about a minute.
+`tests/podman/` runs inside the image under test (`tests/podman.Containerfile` adds pytest), so it only covers what needs no booted system: system health (presets, unit verification, missing libraries, package integrity, unowned and setuid files, selinux policy labels), kernel and initramfs contents, kernel modules and signing, nvidia driver stack (and its absence in the plain flavor), debloat, repos, rpm dependencies, unit enablement and unit files, shipped config, multimedia codecs, gaming, dev tooling (rootless subids, brew unpacked by its own unit, zsh as a user, distrobox, toolbox, qemu, python venvs), container policy, and every `kctl`/`kctl-update-check` path with stubbed commands. Runs on every PR in about a minute.
+
+The image under test is described, not guessed: the flavor defaults from the image name, `signed=1` fails an unsigned kernel instead of skipping, and `version` checks `os-release`. CI passes all three.
 
 ```bash
 just test-podman localhost/kuubik:latest
+just test-podman localhost/raw-img:latest kuubik-nvidia 1 20261126.1
 ```
 
 ## vm
