@@ -127,7 +127,7 @@ def test_binaries_find_their_libraries(run):
     assert result.stdout.strip() == "", f"missing shared libraries:\n{result.stdout}"
 
 
-def test_package_files_unmodified(run):
+def test_package_files_unmodified(run, expect_signed, kernel_version):
     # a build script or system_files overwriting a file a package owns
     result = run(
         "rpm -Va --nomtime --nouser --nogroup --nomode --nordev --nolinkto 2>/dev/null"
@@ -137,6 +137,9 @@ def test_package_files_unmodified(run):
     modified = {
         path for path in result.stdout.split() if "/__pycache__/" not in path
     } - MODIFIED_ALLOWED
+    if expect_signed:
+        # 90-finalize.sh sbsigns the kernel in place
+        modified.discard(f"/lib/modules/{kernel_version}/vmlinuz")
     assert modified == set(), f"package files changed in the image: {sorted(modified)}"
 
 

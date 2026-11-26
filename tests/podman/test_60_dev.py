@@ -40,8 +40,9 @@ def test_vm_packages(run):
 
 
 def test_container_trust_policy(run):
-    # as podman reads policy.json: kuubik images signed, everything else pullable
-    rows = [line.split() for line in run("podman image trust show").stdout.splitlines()[1:]]
+    # as podman reads policy.json: kuubik images signed, everything else pullable.
+    # throwaway vfs root: overlay storage needs mount privileges the test container lacks
+    rows = [line.split() for line in run("podman --root \"$(mktemp -d)\" --storage-driver=vfs image trust show").stdout.splitlines()[1:]]
     assert ["all", "default", "reject"] in rows, rows
     assert ["repository", "ghcr.io/kuubik-os", "sigstoreSigned", "N/A"] in rows, rows
     assert ["repository", "accept"] in rows, "other registries are not pullable"

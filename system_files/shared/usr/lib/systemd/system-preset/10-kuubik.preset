@@ -2,3 +2,5 @@
 enable ananicy-cpp.service
 enable brew-setup.service
 enable kuubik-factory-image.service
+enable systemd-resolved-monitor.socket
+enable systemd-resolved-varlink.socket

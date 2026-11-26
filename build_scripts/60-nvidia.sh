@@ -70,6 +70,8 @@ dnf5 -y install --from-repo=nvidia-container-toolkit nvidia-container-toolkit nv
 semanage boolean -m --on container_use_devices
 
 dnf5 -y remove akmods akmod-nvidia
+
+rm -rfv /etc/pki/akmods
 rm -fv /etc/yum.repos.d/nvidia-container-toolkit.repo /etc/yum.repos.d/fedora-nvidia.repo
 rm -fv /usr/share/applications/nvtop.desktop
 # nvidia-settings --load-config-only only works on x11, fails on every wayland login
